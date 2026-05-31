@@ -45,8 +45,8 @@ def cargar_imagen_satelital():
 
 @st.cache_data(ttl=600)
 def analizar_con_gemini(img_satelital_b64: str) -> dict:
-    api_key = st.secrets["GEMINI_API_KEY"]
-    mapa    = Image.open(Path("departamentos_tucuman.jpg"))
+    api_key  = st.secrets["GEMINI_API_KEY"]
+    mapa     = Image.open(Path("departamentos_tucuman.jpg"))
     mapa_b64 = imagen_a_base64(mapa)
 
     payload = {
@@ -60,8 +60,7 @@ def analizar_con_gemini(img_satelital_b64: str) -> dict:
         "generationConfig": {"temperature": 0.2}
     }
 
-    api_key = st.secrets["GEMINI_API_KEY"]
-url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    url  = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     resp = requests.post(url, json=payload, timeout=60)
     resp.raise_for_status()
 
@@ -75,12 +74,11 @@ def color_nubosidad(pct: int) -> str:
     elif pct >= 25: return "#f0c040"
     else:           return "#6abf6a"
 
-# ── Main ──────────────────────────────────────────────────────
 try:
     crop, ts_str = cargar_imagen_satelital()
     st.caption(f"🕐 Última actualización: {ts_str}")
 
-    col_img, col_tabla = st.columns([1.5*3, 1.5*2])
+    col_img, col_tabla = st.columns([3, 2])
 
     with col_img:
         st.image(crop, use_container_width=True)
@@ -94,8 +92,8 @@ try:
         for depto, pct in sorted(datos.items(), key=lambda x: -x[1]):
             color = color_nubosidad(pct)
             st.markdown(
-                f"""<div style='display:flex; justify-content:space-between; 
-                    padding:4px 8px; margin:2px 0; border-radius:4px; 
+                f"""<div style='display:flex; justify-content:space-between;
+                    padding:4px 8px; margin:2px 0; border-radius:4px;
                     background:{color}20; border-left:4px solid {color}'>
                     <span>{depto}</span>
                     <strong>{pct}%</strong>
