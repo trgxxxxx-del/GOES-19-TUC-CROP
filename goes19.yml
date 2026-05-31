@@ -1,9 +1,0 @@
-name: GOES-19 Tucumán
-on:
-  workflow_dispatch:
-jobs:
-  placeholder:
-    runs-on: ubuntu-latest
-    steps:
-      - name: No-op
-        run: echo "Workflow desactivado - Streamlit descarga directo de NOAA"
