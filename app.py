@@ -60,7 +60,8 @@ def analizar_con_gemini(img_satelital_b64: str) -> dict:
         "generationConfig": {"temperature": 0.2}
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    api_key = st.secrets["GEMINI_API_KEY"]
+url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     resp = requests.post(url, json=payload, timeout=60)
     resp.raise_for_status()
 
