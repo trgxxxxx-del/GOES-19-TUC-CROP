@@ -15,7 +15,8 @@ st.title("🛰️ GOES-19 — Tucumán")
 URL  = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
 CROP = (2679, 1344, 2985, 1639)
 
-try:
+@st.cache_data(ttl=600)
+def cargar_imagen():
     resp = requests.get(URL, timeout=120)
     resp.raise_for_status()
 
@@ -29,7 +30,10 @@ try:
 
     img  = Image.open(BytesIO(resp.content))
     crop = img.crop(CROP)
+    return crop, ts_str
 
+try:
+    crop, ts_str = cargar_imagen()
     st.caption(f"🕐 Última actualización: {ts_str}")
     st.image(crop, use_container_width=True)
 
