@@ -1,3 +1,5 @@
 Pillow
 requests
 streamlit
+folium
+streamlit-folium
