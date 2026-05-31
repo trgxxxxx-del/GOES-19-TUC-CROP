@@ -5,6 +5,7 @@ import requests
 from io import BytesIO
 import base64
 import json
+import time
 from pathlib import Path
 
 st.set_page_config(
@@ -60,13 +61,19 @@ def analizar_con_gemini(img_satelital_b64: str) -> dict:
         "generationConfig": {"temperature": 0.2}
     }
 
-    url  = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
-    resp = requests.post(url, json=payload, timeout=60)
-    resp.raise_for_status()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
 
-    texto = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-    texto = texto.strip().replace("```json", "").replace("```", "").strip()
-    return json.loads(texto)
+    for intento in range(3):
+        resp = requests.post(url, json=payload, timeout=60)
+        if resp.status_code == 429:
+            time.sleep(10 * (intento + 1))
+            continue
+        resp.raise_for_status()
+        texto = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        texto = texto.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(texto)
+
+    raise Exception("Gemini no disponible temporalmente (límite de requests). Intentá en unos minutos.")
 
 def color_nubosidad(pct: int) -> str:
     if pct >= 75:   return "#4a90d9"
@@ -85,21 +92,23 @@ try:
 
     with col_tabla:
         st.subheader("☁️ Nubosidad por departamento")
-        with st.spinner("Analizando con Gemini..."):
-            img_b64 = imagen_a_base64(crop)
-            datos   = analizar_con_gemini(img_b64)
-
-        for depto, pct in sorted(datos.items(), key=lambda x: -x[1]):
-            color = color_nubosidad(pct)
-            st.markdown(
-                f"""<div style='display:flex; justify-content:space-between;
-                    padding:4px 8px; margin:2px 0; border-radius:4px;
-                    background:{color}20; border-left:4px solid {color}'>
-                    <span>{depto}</span>
-                    <strong>{pct}%</strong>
-                </div>""",
-                unsafe_allow_html=True
-            )
+        try:
+            with st.spinner("Analizando con Gemini..."):
+                img_b64 = imagen_a_base64(crop)
+                datos   = analizar_con_gemini(img_b64)
+            for depto, pct in sorted(datos.items(), key=lambda x: -x[1]):
+                color = color_nubosidad(pct)
+                st.markdown(
+                    f"""<div style='display:flex; justify-content:space-between;
+                        padding:4px 8px; margin:2px 0; border-radius:4px;
+                        background:{color}20; border-left:4px solid {color}'>
+                        <span>{depto}</span>
+                        <strong>{pct}%</strong>
+                    </div>""",
+                    unsafe_allow_html=True
+                )
+        except Exception as e:
+            st.warning(str(e))
 
 except Exception as e:
     st.error(f"⚠️ Error: {e}")
