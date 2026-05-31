@@ -79,7 +79,7 @@ try:
     crop, ts_str = cargar_imagen_satelital()
     st.caption(f"🕐 Última actualización: {ts_str}")
 
-    col_img, col_tabla = st.columns([1, 1])
+    col_img, col_tabla = st.columns([3, 2])
 
     with col_img:
         st.image(crop, use_container_width=True)
