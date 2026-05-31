@@ -10,7 +10,7 @@ from pathlib import Path
 st.set_page_config(
     page_title="GOES-19 Tucumán",
     page_icon="🛰️",
-    layout="wide"
+    layout="centered"
 )
 
 st.title("🛰️ GOES-19 — Tucumán")
@@ -79,7 +79,7 @@ try:
     crop, ts_str = cargar_imagen_satelital()
     st.caption(f"🕐 Última actualización: {ts_str}")
 
-    col_img, col_tabla = st.columns([2, 1])
+    col_img, col_tabla = st.columns([1, 1])
 
     with col_img:
         st.image(crop, use_container_width=True)
