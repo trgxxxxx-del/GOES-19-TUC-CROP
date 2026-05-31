@@ -27,10 +27,10 @@ st.caption(f"🕐 Última actualización: {ts}")
 # Imagen: 7200x4320 px
 # Crop: left=2730, top=1360, right=2986, bottom=1620
 
-SSA_LON_LEFT  = -81.30
-SSA_LON_RIGHT = -34.00
-SSA_LAT_TOP   = -0.18
-SSA_LAT_BOT   = -59.00
+SSA_LON_LEFT  = -90.0
+SSA_LON_RIGHT = -30.0
+SSA_LAT_TOP   =  15.0
+SSA_LAT_BOT   = -60.0
 IMG_W = 7200
 IMG_H = 4320
 
