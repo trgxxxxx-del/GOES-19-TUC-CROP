@@ -12,10 +12,11 @@ st.set_page_config(
 
 st.title("🛰️ GOES-19 — Tucumán")
 
-URL = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
+URL  = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
+CROP = (2679, 1344, 2985, 1639)
 
 try:
-    resp = requests.get(URL, timeout=30)
+    resp = requests.get(URL, timeout=120)
     resp.raise_for_status()
 
     last_modified = resp.headers.get("Last-Modified", "")
@@ -26,9 +27,11 @@ try:
     else:
         ts_str = "—"
 
-    img = Image.open(BytesIO(resp.content))
+    img  = Image.open(BytesIO(resp.content))
+    crop = img.crop(CROP)
+
     st.caption(f"🕐 Última actualización: {ts_str}")
-    st.image(img, use_container_width=True)
+    st.image(crop, use_container_width=True)
 
 except Exception as e:
     st.error(f"⚠️ No se pudo cargar la imagen: {e}")
