@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 URL  = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
-CROP = (2820, 1374, 2986, 1589)
+CROP = (2730, 1360, 2986, 1620)
 OUT  = Path("tucuman.png")
 META = Path("last_update.txt")
 
