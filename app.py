@@ -72,9 +72,9 @@ def cargar_imagen_satelital():
 
 
 @st.cache_data(ttl=0)
-def calcular_nubosidad(img_bytes: bytes, ts_key: str) -> list:
-    img   = Image.open(BytesIO(img_bytes)).convert("L")
-    gray  = np.array(img)
+def calcular_nubosidad(img_bytes: bytes, ts_key: str):
+    img  = Image.open(BytesIO(img_bytes)).convert("L")
+    gray = np.array(img)
 
     df          = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
     dept_matrix = df.values.astype(int)
@@ -85,6 +85,8 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str) -> list:
             (mat_w, mat_h), Image.LANCZOS
         )
         gray = np.array(img_resized)
+    else:
+        img_resized = Image.open(BytesIO(img_bytes)).convert("L")
 
     results = []
     for nombre, codigo in DEPARTAMENTOS.items():
@@ -98,7 +100,7 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str) -> list:
         results.append((nombre, round(pct, 1)))
 
     results.sort(key=lambda x: x[1], reverse=True)
-    return results
+    return results, img_resized
 
 
 def color_nubosidad(pct: float) -> str:
@@ -108,20 +110,17 @@ def color_nubosidad(pct: float) -> str:
     else:           return "#6abf6a"
 
 
-def imagen_a_bytes(img: Image.Image) -> bytes:
+def imagen_a_bytes(img: Image.Image, fmt="JPEG") -> bytes:
     buf = BytesIO()
-    img.save(buf, format="JPEG")
+    img.save(buf, format=fmt)
     return buf.getvalue()
 
 
 try:
     crop, ts_str, ts_key = cargar_imagen_satelital()
-    st.caption(f"🕐 Última actualización: **{ts_str}**")
+    st.caption(f"🕐 Última actualización NOAA: **{ts_str}**")
 
     col_img, col_tabla = st.columns([3, 2])
-
-    with col_img:
-        st.image(crop, use_container_width=True)
 
     with col_tabla:
         st.subheader("☁️ Nubosidad por departamento")
@@ -133,8 +132,37 @@ try:
             )
         else:
             try:
-                img_bytes = imagen_a_bytes(crop)
-                datos     = calcular_nubosidad(img_bytes, ts_key)
+                img_bytes          = imagen_a_bytes(crop)
+                datos, img_procesada = calcular_nubosidad(img_bytes, ts_key)
+
+                with col_img:
+                    st.image(img_procesada, use_container_width=True)
+
+                    col_d1, col_d2 = st.columns(2)
+
+                    # Descarga imagen escala de grises
+                    with col_d1:
+                        png_bytes = imagen_a_bytes(img_procesada, fmt="PNG")
+                        st.download_button(
+                            label="⬇️ Imagen procesada",
+                            data=png_bytes,
+                            file_name="tucuman_grises.png",
+                            mime="image/png",
+                            use_container_width=True
+                        )
+
+                    # Descarga matriz de grises como CSV
+                    with col_d2:
+                        gray_array = np.array(img_procesada)
+                        df_gray    = pd.DataFrame(gray_array)
+                        csv_bytes  = df_gray.to_csv(index=False, header=False).encode("utf-8")
+                        st.download_button(
+                            label="⬇️ Matriz de grises (.csv)",
+                            data=csv_bytes,
+                            file_name="matriz_grises.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
 
                 for nombre, pct in datos:
                     color = color_nubosidad(pct)
