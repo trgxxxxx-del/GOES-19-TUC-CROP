@@ -24,7 +24,7 @@ st.markdown("""
 st.title("🛰️ Imágen satelital de Tucumán")
 
 URL       = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
-CROP      = (2679, 1344, 2985, 1639)
+CROP      = (2679, 1344, 2894, 1560)  # exactamente 215×216 px
 THRESHOLD = 128
 MAT_PATH  = Path("matriz de departamentos.xlsx")
 
@@ -79,14 +79,13 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str):
     df          = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
     dept_matrix = df.values.astype(int)
 
+    # Seguridad: redimensionar solo si no coincide
     if dept_matrix.shape != gray.shape:
         mat_h, mat_w = dept_matrix.shape
-        img_resized  = Image.open(BytesIO(img_bytes)).convert("L").resize(
-            (mat_w, mat_h), Image.LANCZOS
-        )
-        gray = np.array(img_resized)
+        img_resized  = img.resize((mat_w, mat_h), Image.LANCZOS)
+        gray         = np.array(img_resized)
     else:
-        img_resized = Image.open(BytesIO(img_bytes)).convert("L")
+        img_resized = img
 
     results = []
     for nombre, codigo in DEPARTAMENTOS.items():
@@ -132,7 +131,7 @@ try:
             )
         else:
             try:
-                img_bytes          = imagen_a_bytes(crop)
+                img_bytes            = imagen_a_bytes(crop)
                 datos, img_procesada = calcular_nubosidad(img_bytes, ts_key)
 
                 with col_img:
@@ -140,7 +139,6 @@ try:
 
                     col_d1, col_d2 = st.columns(2)
 
-                    # Descarga imagen escala de grises
                     with col_d1:
                         png_bytes = imagen_a_bytes(img_procesada, fmt="PNG")
                         st.download_button(
@@ -151,7 +149,6 @@ try:
                             use_container_width=True
                         )
 
-                    # Descarga matriz de grises como CSV
                     with col_d2:
                         gray_array = np.array(img_procesada)
                         df_gray    = pd.DataFrame(gray_array)
