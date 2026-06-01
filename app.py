@@ -67,25 +67,22 @@ def cargar_imagen_satelital():
         ts_key = ""
 
     img  = Image.open(BytesIO(resp.content))
-    crop = img.crop(CROP)
+    crop = img.crop(CROP)  # color original, 215×216 px
     return crop, ts_str, ts_key
 
 
 @st.cache_data(ttl=0)
 def calcular_nubosidad(img_bytes: bytes, ts_key: str):
+    # Convierte a grises SOLO para el cálculo, no toca la imagen original
     img  = Image.open(BytesIO(img_bytes)).convert("L")
     gray = np.array(img)
 
     df          = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
     dept_matrix = df.values.astype(int)
 
-    # Seguridad: redimensionar solo si no coincide
     if dept_matrix.shape != gray.shape:
         mat_h, mat_w = dept_matrix.shape
-        img_resized  = img.resize((mat_w, mat_h), Image.LANCZOS)
-        gray         = np.array(img_resized)
-    else:
-        img_resized = img
+        gray = np.array(img.resize((mat_w, mat_h), Image.LANCZOS))
 
     results = []
     for nombre, codigo in DEPARTAMENTOS.items():
@@ -99,7 +96,7 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str):
         results.append((nombre, round(pct, 1)))
 
     results.sort(key=lambda x: x[1], reverse=True)
-    return results, img_resized
+    return results
 
 
 def color_nubosidad(pct: float) -> str:
@@ -109,7 +106,7 @@ def color_nubosidad(pct: float) -> str:
     else:           return "#6abf6a"
 
 
-def imagen_a_bytes(img: Image.Image, fmt="JPEG") -> bytes:
+def imagen_a_bytes(img: Image.Image, fmt="PNG") -> bytes:
     buf = BytesIO()
     img.save(buf, format=fmt)
     return buf.getvalue()
@@ -121,6 +118,19 @@ try:
 
     col_img, col_tabla = st.columns([3, 2])
 
+    with col_img:
+        # Mostrar recorte en color original
+        st.image(crop, use_container_width=True)
+
+        # Descargar recorte en color original
+        st.download_button(
+            label="⬇️ Descargar imagen (215×216 px)",
+            data=imagen_a_bytes(crop, fmt="PNG"),
+            file_name="tucuman_satelital.png",
+            mime="image/png",
+            use_container_width=True
+        )
+
     with col_tabla:
         st.subheader("☁️ Nubosidad por departamento")
 
@@ -131,35 +141,8 @@ try:
             )
         else:
             try:
-                img_bytes            = imagen_a_bytes(crop)
-                datos, img_procesada = calcular_nubosidad(img_bytes, ts_key)
-
-                with col_img:
-                    st.image(img_procesada, use_container_width=True)
-
-                    col_d1, col_d2 = st.columns(2)
-
-                    with col_d1:
-                        png_bytes = imagen_a_bytes(img_procesada, fmt="PNG")
-                        st.download_button(
-                            label="⬇️ Imagen procesada",
-                            data=png_bytes,
-                            file_name="tucuman_grises.png",
-                            mime="image/png",
-                            use_container_width=True
-                        )
-
-                    with col_d2:
-                        gray_array = np.array(img_procesada)
-                        df_gray    = pd.DataFrame(gray_array)
-                        csv_bytes  = df_gray.to_csv(index=False, header=False).encode("utf-8")
-                        st.download_button(
-                            label="⬇️ Matriz de grises (.csv)",
-                            data=csv_bytes,
-                            file_name="matriz_grises.csv",
-                            mime="text/csv",
-                            use_container_width=True
-                        )
+                img_bytes = imagen_a_bytes(crop)
+                datos     = calcular_nubosidad(img_bytes, ts_key)
 
                 for nombre, pct in datos:
                     color = color_nubosidad(pct)
