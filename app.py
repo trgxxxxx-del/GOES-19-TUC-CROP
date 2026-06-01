@@ -113,7 +113,7 @@ def imagen_a_bytes(img: Image.Image, fmt="PNG") -> bytes:
 
 try:
     crop, ts_str, ts_key = cargar_imagen_satelital()
-    st.caption(f"🕐 Última actualización NOAA: **{ts_str}**")
+    st.caption(f"🕐 Última actualización: **{ts_str}**")
 
     # Botón para limpiar caché y recargar
     if st.button("🔄 Recargar imagen"):
