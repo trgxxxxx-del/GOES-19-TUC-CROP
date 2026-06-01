@@ -116,7 +116,7 @@ def imagen_a_bytes(img: Image.Image) -> bytes:
 
 try:
     crop, ts_str, ts_key = cargar_imagen_satelital()
-    st.caption(f"🕐 Última actualización NOAA: **{ts_str}**")
+    st.caption(f"🕐 Última actualización: **{ts_str}**")
 
     col_img, col_tabla = st.columns([3, 2])
 
