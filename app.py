@@ -13,14 +13,21 @@ st.set_page_config(
     layout="wide"
 )
 
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("🛰️ Imágen satelital de Tucumán")
 
 URL       = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
 CROP      = (2679, 1344, 2985, 1639)
-THRESHOLD = 128  # píxeles con gris > umbral = NUBE
+THRESHOLD = 128
 MAT_PATH  = Path("matriz de departamentos.xlsx")
 
-# Códigos de departamento en la matriz XLSX
 DEPARTAMENTOS = {
     "San Miguel de Tucumán": 76,
     "Trancas":               175,
@@ -44,7 +51,6 @@ DEPARTAMENTOS = {
 
 @st.cache_data(ttl=600)
 def cargar_imagen_satelital():
-    """Descarga la imagen GOES-19 y devuelve el recorte de Tucumán + timestamp."""
     resp = requests.get(URL, timeout=120)
     resp.raise_for_status()
 
@@ -55,7 +61,7 @@ def cargar_imagen_satelital():
         ).replace(tzinfo=timezone.utc)
         dt_arg = dt_utc.astimezone(timezone(timedelta(hours=-3)))
         ts_str  = dt_arg.strftime("%-d de %B %Y, %H:%M hs (Argentina)")
-        ts_key  = last_modified          # clave para detectar imagen nueva
+        ts_key  = last_modified
     else:
         ts_str = "—"
         ts_key = ""
@@ -67,21 +73,12 @@ def cargar_imagen_satelital():
 
 @st.cache_data(ttl=0)
 def calcular_nubosidad(img_bytes: bytes, ts_key: str) -> list:
-    """
-    Recibe la imagen recortada como bytes y el timestamp como clave de caché.
-    Devuelve lista de (departamento, pct) ordenada de mayor a menor nubosidad.
-    El parámetro ts_key garantiza que Streamlit recalcule solo cuando NOAA
-    suba una imagen nueva (Last-Modified cambia).
-    """
-    # Convertir a escala de grises → array numpy
     img   = Image.open(BytesIO(img_bytes)).convert("L")
     gray  = np.array(img)
 
-    # Cargar matriz de departamentos
     df          = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
     dept_matrix = df.values.astype(int)
 
-    # Si las dimensiones no coinciden, redimensionar la imagen al tamaño de la matriz
     if dept_matrix.shape != gray.shape:
         mat_h, mat_w = dept_matrix.shape
         img_resized  = Image.open(BytesIO(img_bytes)).convert("L").resize(
@@ -117,8 +114,6 @@ def imagen_a_bytes(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
-
 try:
     crop, ts_str, ts_key = cargar_imagen_satelital()
     st.caption(f"🕐 Última actualización NOAA: **{ts_str}**")
@@ -152,8 +147,6 @@ try:
                         </div>""",
                         unsafe_allow_html=True,
                     )
-
-                
 
             except Exception as e:
                 st.error(f"Error en el cálculo: {e}")
