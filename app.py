@@ -81,11 +81,13 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str) -> list:
     df          = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
     dept_matrix = df.values.astype(int)
 
+    # Si las dimensiones no coinciden, redimensionar la imagen al tamaño de la matriz
     if dept_matrix.shape != gray.shape:
-        raise ValueError(
-            f"Dimensiones no coinciden: imagen {gray.shape} vs "
-            f"planilla {dept_matrix.shape}. Ambas deben ser iguales."
+        mat_h, mat_w = dept_matrix.shape
+        img_resized  = Image.open(BytesIO(img_bytes)).convert("L").resize(
+            (mat_w, mat_h), Image.LANCZOS
         )
+        gray = np.array(img_resized)
 
     results = []
     for nombre, codigo in DEPARTAMENTOS.items():
