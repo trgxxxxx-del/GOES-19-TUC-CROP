@@ -8,7 +8,7 @@ import pandas as pd
 from pathlib import Path
 
 st.set_page_config(
-    page_title="GOES-19 Tucumán",
+    page_title="Nubosidad en Tucumán",
     page_icon="🛰️",
     layout="wide"
 )
@@ -153,7 +153,7 @@ try:
                         unsafe_allow_html=True,
                     )
 
-                st.caption(f"Umbral de nube: gris > {THRESHOLD}/255")
+                
 
             except Exception as e:
                 st.error(f"Error en el cálculo: {e}")
