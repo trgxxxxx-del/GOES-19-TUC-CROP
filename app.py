@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🛰️ GOES-19 — Tucumán")
+st.title("🛰️ imágen satelital de Tucumán")
 
 URL       = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
 CROP      = (2679, 1344, 2985, 1639)
