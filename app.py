@@ -161,3 +161,6 @@ try:
 
 except Exception as e:
     st.error(f"⚠️ Error al cargar la imagen: {e}")
+    if st.button("🔄 Recargar imagen"):
+    st.cache_data.clear()
+    st.rerun()
