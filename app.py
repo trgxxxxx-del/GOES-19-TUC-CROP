@@ -24,7 +24,7 @@ st.markdown("""
 st.title("🛰️ Imágen satelital de Tucumán")
 
 URL       = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
-CROP = (2620, 1300, 2835, 1516)  # movido ~59px izquierda, ~44px arriba
+CROP      = (2540, 1290, 2755, 1506)
 THRESHOLD = 128
 MAT_PATH  = Path("matriz de departamentos.xlsx")
 
@@ -67,13 +67,12 @@ def cargar_imagen_satelital():
         ts_key = ""
 
     img  = Image.open(BytesIO(resp.content))
-    crop = img.crop(CROP)  # color original, 215×216 px
+    crop = img.crop(CROP)
     return crop, ts_str, ts_key
 
 
 @st.cache_data(ttl=0)
 def calcular_nubosidad(img_bytes: bytes, ts_key: str):
-    # Convierte a grises SOLO para el cálculo, no toca la imagen original
     img  = Image.open(BytesIO(img_bytes)).convert("L")
     gray = np.array(img)
 
@@ -116,13 +115,15 @@ try:
     crop, ts_str, ts_key = cargar_imagen_satelital()
     st.caption(f"🕐 Última actualización NOAA: **{ts_str}**")
 
+    # Botón para limpiar caché y recargar
+    if st.button("🔄 Recargar imagen"):
+        st.cache_data.clear()
+        st.rerun()
+
     col_img, col_tabla = st.columns([3, 2])
 
     with col_img:
-        # Mostrar recorte en color original
         st.image(crop, use_container_width=True)
-
-        # Descargar recorte en color original
         st.download_button(
             label="⬇️ Descargar imagen (215×216 px)",
             data=imagen_a_bytes(crop, fmt="PNG"),
@@ -161,6 +162,3 @@ try:
 
 except Exception as e:
     st.error(f"⚠️ Error al cargar la imagen: {e}")
-    if st.button("🔄 Recargar imagen"):
-    st.cache_data.clear()
-    st.rerun()
