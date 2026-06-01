@@ -1,3 +1,6 @@
 streamlit
 Pillow
 requests
+numpy
+pandas
+openpyxl
