@@ -24,7 +24,7 @@ st.markdown("""
 st.title("🛰️ Imágen satelital de Tucumán")
 
 URL       = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
-CROP = (2717, 1372, 2932, 1588)
+CROP = (2717, 1376, 2932, 1594)
 THRESHOLD = 128
 MAT_PATH  = Path("matriz de departamentos.xlsx")
 
