@@ -3,10 +3,6 @@ from PIL import Image
 from datetime import datetime, timezone, timedelta
 import requests
 from io import BytesIO
-import base64
-import json
-import time
-from pathlib import Path
 
 st.set_page_config(
     page_title="GOES-19 Tucumán",
@@ -18,16 +14,6 @@ st.title("🛰️ GOES-19 — Tucumán")
 
 URL  = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
 CROP = (2679, 1344, 2985, 1639)
-
-PROMPT = """Te envío dos imágenes: la primera es un mapa con los departamentos de la provincia de Tucumán (Argentina), y la segunda es una imagen satelital GOES-19 de la misma zona.
-Usando el mapa como referencia geográfica, estimá el porcentaje de cobertura nubosa (0 a 100) para cada departamento.
-Respondé SOLO en JSON con este formato exacto, sin texto adicional, sin bloques de código:
-{"Capital": 80, "Yerba Buena": 60, "Tafí Viejo": 40, "Tafí del Valle": 20, "Trancas": 90, "Burruyacú": 70, "Cruz Alta": 50, "Leales": 30, "Simoca": 10, "Graneros": 80, "La Cocha": 60, "Juan Bautista Alberdi": 40, "Río Chico": 20, "Chicligasta": 90, "Monteros": 70, "Famaillá": 50, "Lules": 30}"""
-
-def imagen_a_base64(img: Image.Image, fmt="JPEG") -> str:
-    buf = BytesIO()
-    img.save(buf, format=fmt)
-    return base64.b64encode(buf.getvalue()).decode()
 
 @st.cache_data(ttl=600)
 def cargar_imagen_satelital():
@@ -44,71 +30,10 @@ def cargar_imagen_satelital():
     crop = img.crop(CROP)
     return crop, ts_str
 
-@st.cache_data(ttl=600)
-def analizar_con_gemini(img_satelital_b64: str) -> dict:
-    api_key  = st.secrets["GEMINI_API_KEY"]
-    mapa     = Image.open(Path("departamentos_tucuman.jpg"))
-    mapa_b64 = imagen_a_base64(mapa)
-
-    payload = {
-        "contents": [{
-            "parts": [
-                {"text": PROMPT},
-                {"inline_data": {"mime_type": "image/jpeg", "data": mapa_b64}},
-                {"inline_data": {"mime_type": "image/jpeg", "data": img_satelital_b64}}
-            ]
-        }],
-        "generationConfig": {"temperature": 0.2}
-    }
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
-
-    for intento in range(3):
-        resp = requests.post(url, json=payload, timeout=60)
-        if resp.status_code == 429:
-            time.sleep(10 * (intento + 1))
-            continue
-        resp.raise_for_status()
-        texto = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-        texto = texto.strip().replace("```json", "").replace("```", "").strip()
-        return json.loads(texto)
-
-    raise Exception("Gemini no disponible temporalmente (límite de requests). Intentá en unos minutos.")
-
-def color_nubosidad(pct: int) -> str:
-    if pct >= 75:   return "#4a90d9"
-    elif pct >= 50: return "#7fb3e0"
-    elif pct >= 25: return "#f0c040"
-    else:           return "#6abf6a"
-
 try:
     crop, ts_str = cargar_imagen_satelital()
     st.caption(f"🕐 Última actualización: {ts_str}")
-
-    col_img, col_tabla = st.columns([3, 2])
-
-    with col_img:
-        st.image(crop, use_container_width=True)
-
-    with col_tabla:
-        st.subheader("☁️ Nubosidad por departamento")
-        try:
-            with st.spinner("Analizando con Gemini..."):
-                img_b64 = imagen_a_base64(crop)
-                datos   = analizar_con_gemini(img_b64)
-            for depto, pct in sorted(datos.items(), key=lambda x: -x[1]):
-                color = color_nubosidad(pct)
-                st.markdown(
-                    f"""<div style='display:flex; justify-content:space-between;
-                        padding:4px 8px; margin:2px 0; border-radius:4px;
-                        background:{color}20; border-left:4px solid {color}'>
-                        <span>{depto}</span>
-                        <strong>{pct}%</strong>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
-        except Exception as e:
-            st.warning(str(e))
+    st.image(crop, use_container_width=True)
 
 except Exception as e:
     st.error(f"⚠️ Error: {e}")
