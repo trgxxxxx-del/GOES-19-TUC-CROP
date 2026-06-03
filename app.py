@@ -25,10 +25,11 @@ st.title("🛰️ Imágen satelital de Tucumán")
 
 URL_GEOCOLOR = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
 URL_NIGHT    = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/DayNightCloudMicroCombo/7200x4320.jpg"
-CROP         = (2717, 1382, 2932, 1600)
-THRESHOLD    = 128
-MAT_PATH     = Path("matriz de departamentos.xlsx")
-TZ_ARG       = timezone(timedelta(hours=-3))
+CROP             = (2717, 1382, 2932, 1600)
+THRESHOLD_DIA    = 185
+THRESHOLD_NOCHE  = 185
+MAT_PATH         = Path("matriz de departamentos.xlsx")
+TZ_ARG           = timezone(timedelta(hours=-3))
 
 DEPARTAMENTOS = {
     "San Miguel de Tucumán": 76,
@@ -52,7 +53,6 @@ DEPARTAMENTOS = {
 
 
 def es_de_dia(dt_arg: datetime) -> bool:
-    """Retorna True si la hora local está entre 6:00 y 19:00."""
     return 6 <= dt_arg.hour < 19
 
 
@@ -80,11 +80,11 @@ def cargar_imagen_satelital():
     img_geo  = Image.open(BytesIO(resp_geo.content))
     crop_geo = img_geo.crop(CROP)
 
-    # Para el cálculo de nubosidad: de noche se descarga también el canal Night
+    # Para el cálculo de nubosidad: de noche se usa el canal Night
     if diurno:
         crop_calculo = crop_geo
     else:
-        resp_night = requests.get(URL_NIGHT, timeout=120)
+        resp_night   = requests.get(URL_NIGHT, timeout=120)
         resp_night.raise_for_status()
         img_night    = Image.open(BytesIO(resp_night.content))
         crop_calculo = img_night.crop(CROP)
@@ -93,13 +93,8 @@ def cargar_imagen_satelital():
 
 
 @st.cache_data(ttl=0)
-def calcular_nubosidad(img_bytes: bytes, ts_key: str):
-    """
-    Recibe los bytes del crop ya seleccionado (GEOCOLOR de día,
-    DayNightCloudMicroCombo de noche) y aplica el mismo umbral en escala
-    de grises en ambos casos.
-    """
-    img  = Image.open(BytesIO(img_bytes)).convert("L")
+def calcular_nubosidad(img_bytes: bytes, ts_key: str, threshold: int):
+    img = Image.open(BytesIO(img_bytes)).convert("L")
 
     df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
     dept_matrix  = df.values.astype(int)
@@ -109,7 +104,7 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str):
         img = img.resize((mat_w, mat_h), Image.LANCZOS)
 
     gray         = np.array(img)
-    mascara_nube = gray > THRESHOLD
+    mascara_nube = gray > threshold
 
     results = []
     for nombre, codigo in DEPARTAMENTOS.items():
@@ -138,7 +133,9 @@ def imagen_a_bytes(img: Image.Image, fmt="PNG") -> bytes:
 try:
     crop_geo, crop_calculo, ts_str, ts_key, diurno = cargar_imagen_satelital()
 
-    modo = "☀️ GEOCOLOR (día)" if diurno else "🌙 Day/Night Cloud Combo (noche)"
+    modo      = "☀️ GEOCOLOR (día)" if diurno else "🌙 Day/Night Cloud Combo (noche)"
+    threshold = THRESHOLD_DIA if diurno else THRESHOLD_NOCHE
+
     st.caption(f"🕐 Última actualización: **{ts_str}** · {modo}")
 
     if st.button("🔄 Recargar imagen"):
@@ -148,7 +145,6 @@ try:
     col_img, col_tabla = st.columns([3, 2])
 
     with col_img:
-        # Siempre se muestra el GEOCOLOR
         st.image(crop_geo, use_container_width=True)
         st.download_button(
             label="⬇️ Descargar imagen (215×216 px)",
@@ -168,9 +164,8 @@ try:
             )
         else:
             try:
-                # El cálculo usa el canal correcto según hora del día
                 calculo_bytes = imagen_a_bytes(crop_calculo)
-                datos         = calcular_nubosidad(calculo_bytes, ts_key)
+                datos         = calcular_nubosidad(calculo_bytes, ts_key, threshold)
 
                 for nombre, pct in datos:
                     color = color_nubosidad(pct)
