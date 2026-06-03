@@ -28,7 +28,7 @@ URL_GEOCOLOR = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/
 URL_NIGHT    = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/DayNightCloudMicroCombo/7200x4320.jpg"
 CROP            = (2717, 1382, 2932, 1600)
 THRESHOLD_DIA   = 185
-THRESHOLD_NOCHE = 150
+THRESHOLD_NOCHE = 185
 MAT_PATH        = Path("matriz de departamentos.xlsx")
 TZ_ARG          = timezone(timedelta(hours=-3))
 
