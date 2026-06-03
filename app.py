@@ -27,7 +27,7 @@ URL_GEOCOLOR = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/
 URL_NIGHT    = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/DayNightCloudMicroCombo/7200x4320.jpg"
 CROP             = (2717, 1382, 2932, 1600)
 THRESHOLD_DIA    = 185
-THRESHOLD_NOCHE  = 185
+PERCENTIL_NOCHE  = 75   # top 25% más brillante = nubes
 MAT_PATH         = Path("matriz de departamentos.xlsx")
 TZ_ARG           = timezone(timedelta(hours=-3))
 
@@ -93,7 +93,7 @@ def cargar_imagen_satelital():
 
 
 @st.cache_data(ttl=0)
-def calcular_nubosidad(img_bytes: bytes, ts_key: str, threshold: int):
+def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
     img = Image.open(BytesIO(img_bytes)).convert("L")
 
     df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
@@ -103,8 +103,16 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str, threshold: int):
     if img.size != (mat_w, mat_h):
         img = img.resize((mat_w, mat_h), Image.LANCZOS)
 
-    gray         = np.array(img)
-    mascara_nube = gray > threshold
+    gray = np.array(img)
+
+    if diurno:
+        # Umbral fijo: nubes blancas sobre superficie más oscura
+        mascara_nube = gray > THRESHOLD_DIA
+    else:
+        # Umbral dinámico por percentil: top 25% más brillante de la imagen
+        # Se adapta automáticamente y aplasta los picos de luz artificial
+        umbral_dinamico = np.percentile(gray, PERCENTIL_NOCHE)
+        mascara_nube    = gray > umbral_dinamico
 
     results = []
     for nombre, codigo in DEPARTAMENTOS.items():
@@ -133,9 +141,7 @@ def imagen_a_bytes(img: Image.Image, fmt="PNG") -> bytes:
 try:
     crop_geo, crop_calculo, ts_str, ts_key, diurno = cargar_imagen_satelital()
 
-    modo      = "☀️ GEOCOLOR (día)" if diurno else "🌙 Day/Night Cloud Combo (noche)"
-    threshold = THRESHOLD_DIA if diurno else THRESHOLD_NOCHE
-
+    modo = "☀️ GEOCOLOR (día)" if diurno else "🌙 Day/Night Cloud Combo (noche)"
     st.caption(f"🕐 Última actualización: **{ts_str}** · {modo}")
 
     if st.button("🔄 Recargar imagen"):
@@ -165,7 +171,7 @@ try:
         else:
             try:
                 calculo_bytes = imagen_a_bytes(crop_calculo)
-                datos         = calcular_nubosidad(calculo_bytes, ts_key, threshold)
+                datos         = calcular_nubosidad(calculo_bytes, ts_key, diurno)
 
                 for nombre, pct in datos:
                     color = color_nubosidad(pct)
