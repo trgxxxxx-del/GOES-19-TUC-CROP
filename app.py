@@ -1,3 +1,4 @@
+
 import streamlit as st
 from PIL import Image
 from datetime import datetime, timezone, timedelta
@@ -25,11 +26,11 @@ st.title("🛰️ Imágen satelital de Tucumán")
 
 URL_GEOCOLOR = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
 URL_NIGHT    = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/DayNightCloudMicroCombo/7200x4320.jpg"
-CROP             = (2717, 1382, 2932, 1600)
+CROP            = (2717, 1382, 2932, 1600)
 THRESHOLD_DIA   = 185
 THRESHOLD_NOCHE = 135
-MAT_PATH         = Path("matriz de departamentos.xlsx")
-TZ_ARG           = timezone(timedelta(hours=-3))
+MAT_PATH        = Path("matriz de departamentos.xlsx")
+TZ_ARG          = timezone(timedelta(hours=-3))
 
 DEPARTAMENTOS = {
     "San Miguel de Tucumán": 76,
@@ -103,16 +104,9 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
     if img.size != (mat_w, mat_h):
         img = img.resize((mat_w, mat_h), Image.LANCZOS)
 
-    gray = np.array(img)
-
-    if diurno:
-        # Umbral fijo: nubes blancas sobre superficie más oscura
-        mascara_nube = gray > THRESHOLD_DIA
-    else:
-        # Umbral dinámico por percentil: top 25% más brillante de la imagen
-        # Se adapta automáticamente y aplasta los picos de luz artificial
-        umbral_dinamico = np.percentile(gray, PERCENTIL_NOCHE)
-        mascara_nube    = gray > umbral_dinamico
+    gray         = np.array(img)
+    threshold    = THRESHOLD_DIA if diurno else THRESHOLD_NOCHE
+    mascara_nube = gray > threshold
 
     results = []
     for nombre, codigo in DEPARTAMENTOS.items():
