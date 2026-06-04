@@ -54,7 +54,7 @@ DEPARTAMENTOS = {
 
 
 def es_de_dia(dt_arg: datetime) -> bool:
-    return 6 <= dt_arg.hour < 19
+    return 6 <= dt_arg.hour < 18
 
 
 @st.cache_data(ttl=600)
