@@ -168,11 +168,11 @@ def _mascaras_lluvia(arr: np.ndarray) -> dict:
     # Verde    R=68  G=176 B=19  → Lluvia moderada
     # Azul     R=18  G=44  B=119 → Lluvia leve
     mascaras = {
-        "Tormenta severa": (R > 180) & (G <  70) & (B <  50),
-        "Tormenta fuerte": (R > 180) & (G >= 70) & (G < 160) & (B < 30),
-        "Lluvia fuerte":   (R > 180) & (G >= 160) & (B < 30),
-        "Lluvia moderada": (G > 120) & (R < 120)  & (B <  60),
-        "Lluvia leve":     (B >  70) & (R <  50)  & (G < 110),
+        "Tormenta fuerte": (R > 180) & (G <  70) & (B <  50),
+        "Lluvia fuerte": (R > 180) & (G >= 70) & (G < 160) & (B < 30),
+        "Lluvia moderada":   (R > 180) & (G >= 160) & (B < 30),
+        "Lluvia leve": (G > 120) & (R < 120)  & (B <  60),
+        "Alta nubosidad":     (B >  70) & (R <  50)  & (G < 110),
     }
     clasificado = np.zeros(arr.shape[:2], dtype=bool)
     for m in mascaras.values():
