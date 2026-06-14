@@ -6,6 +6,7 @@ from io import BytesIO
 import numpy as np
 import pandas as pd
 from pathlib import Path
+import cv2
 
 st.set_page_config(
     page_title="Nubosidad en Tucumán",
@@ -33,8 +34,12 @@ st.markdown("""
 
 st.title("🛰️ Imágen satelital de Tucumán")
 
-URL_GEOCOLOR    = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
-URL_NIGHT       = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/16/7200x4320.jpg"
+# ── URLs ─────────────────────────────────────────────────────────────────────
+URL_GEOCOLOR = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
+URL_NIGHT    = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/16/7200x4320.jpg"
+URL_BAND13   = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/13/7200x4320.jpg"
+
+# ── Constantes ───────────────────────────────────────────────────────────────
 CROP            = (2717, 1382, 2932, 1600)
 THRESHOLD_DIA   = 110
 THRESHOLD_NOCHE = 110
@@ -42,6 +47,47 @@ MAT_PATH        = Path("matriz de departamentos.xlsx")
 MODEL_PATH      = Path("LapSRN_x2.pb")
 TZ_ARG          = timezone(timedelta(hours=-3))
 
+# ── Paleta BD Enhancement Band 13 – valores RGB calibrados ───────────────────
+# Rojo        R≈230  G≈39   B≈14   → Tormenta severa   (tops < −65°C)
+# Naranja     R≈237  G≈122  B≈5    → Tormenta fuerte   (tops −55/−65°C)
+# Amarillo    R≈232  G≈231  B≈3    → Lluvia fuerte      (tops −45/−55°C)
+# Verde       R≈107  G≈231  B≈9    → Lluvia moderada   (tops −35/−45°C)
+# Azul oscuro R≈17   G≈34   B≈128  → Lluvia leve       (tops −20/−35°C)
+# Gris        R≈G≈B              → Sin lluvia
+LLUVIA_CATEGORIAS = [
+    "Tormenta severa",
+    "Tormenta fuerte",
+    "Lluvia fuerte",
+    "Lluvia moderada",
+    "Lluvia leve",
+    "Sin lluvia",
+]
+LLUVIA_COLORES = {
+    "Tormenta severa": "#e6271e",
+    "Tormenta fuerte": "#ed7a05",
+    "Lluvia fuerte":   "#e8e703",
+    "Lluvia moderada": "#6be709",
+    "Lluvia leve":     "#1122c0",
+    "Sin lluvia":      "#6abf6a",
+}
+LLUVIA_ICONOS = {
+    "Tormenta severa": "🌪️",
+    "Tormenta fuerte": "⛈️",
+    "Lluvia fuerte":   "🌧️",
+    "Lluvia moderada": "🌦️",
+    "Lluvia leve":     "🌂",
+    "Sin lluvia":      "☀️",
+}
+# Cobertura mínima del departamento para asignar la categoría
+LLUVIA_UMBRAL = {
+    "Tormenta severa": 3,
+    "Tormenta fuerte": 5,
+    "Lluvia fuerte":   10,
+    "Lluvia moderada": 10,
+    "Lluvia leve":     10,
+}
+
+# ── Departamentos ─────────────────────────────────────────────────────────────
 DEPARTAMENTOS = {
     "San Miguel de Tucumán": 76,
     "Trancas":               175,
@@ -63,13 +109,13 @@ DEPARTAMENTOS = {
 }
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
 def es_de_dia(dt_arg: datetime) -> bool:
     return 6 <= dt_arg.hour < 18
 
 
 @st.cache_resource
 def cargar_modelo_sr():
-    """Carga el modelo LapSRN x2 una sola vez en memoria."""
     if not MODEL_PATH.exists():
         return None
     sr = cv2.dnn_superres.DnnSuperResImpl_create()
@@ -78,12 +124,7 @@ def cargar_modelo_sr():
     return sr
 
 
-from PIL import ImageEnhance, ImageFilter
-import numpy as np
-import cv2
-
 def mejorar_imagen(img: Image.Image, sr_model) -> Image.Image:
-    # 1. Upscale base (LapSRN o LANCZOS, como ya tenés)
     if sr_model is None:
         w, h = img.size
         img = img.resize((w * 2, h * 2), Image.LANCZOS)
@@ -92,22 +133,45 @@ def mejorar_imagen(img: Image.Image, sr_model) -> Image.Image:
         result = sr_model.upsample(arr)
         img    = Image.fromarray(result)
 
-    # 2. Reducir ruido JPEG (bilateral filter — preserva bordes)
     arr = np.array(img)
     arr = cv2.bilateralFilter(arr, d=5, sigmaColor=30, sigmaSpace=30)
     img = Image.fromarray(arr)
-
-    # 3. Sharpen suave (unsharp mask)
     img = img.filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=3))
-
-    # 4. Contraste leve
     img = ImageEnhance.Contrast(img).enhance(1.15)
-
-    # 5. Saturación leve (solo para GEOCOLOR diurno)
     img = ImageEnhance.Color(img).enhance(1.2)
-
     return img
 
+
+def imagen_a_bytes(img: Image.Image, fmt="PNG") -> bytes:
+    buf = BytesIO()
+    img.save(buf, format=fmt)
+    return buf.getvalue()
+
+
+def color_nubosidad(pct: float) -> str:
+    if pct >= 75:   return "#4a90d9"
+    elif pct >= 50: return "#7fb3e0"
+    elif pct >= 25: return "#f0c040"
+    else:           return "#6abf6a"
+
+
+def _mascaras_lluvia(arr: np.ndarray) -> dict:
+    R, G, B = arr[:,:,0], arr[:,:,1], arr[:,:,2]
+    mascaras = {
+        "Tormenta severa": (R > 180) & (G <  80) & (B <  80),
+        "Tormenta fuerte": (R > 180) & (G >= 80) & (G < 160) & (B < 80),
+        "Lluvia fuerte":   (R > 180) & (G >= 160) & (B < 80),
+        "Lluvia moderada": (G > 150) & (R < 150) & (B <  80),
+        "Lluvia leve":     (B > 80)  & (R <  80) & (G <  80),
+    }
+    clasificado = np.zeros(arr.shape[:2], dtype=bool)
+    for m in mascaras.values():
+        clasificado |= m
+    mascaras["Sin lluvia"] = ~clasificado
+    return mascaras
+
+
+# ── Carga de imágenes ─────────────────────────────────────────────────────────
 @st.cache_data(ttl=600)
 def cargar_imagen_satelital():
     ahora_arg = datetime.now(TZ_ARG)
@@ -139,9 +203,16 @@ def cargar_imagen_satelital():
         img_night    = Image.open(BytesIO(resp_night.content))
         crop_calculo = img_night.crop(CROP)
 
-    return crop_geo, crop_calculo, ts_str, ts_key, diurno
+    # Band 13 siempre, independiente de día/noche
+    resp_b13 = requests.get(URL_BAND13, timeout=120)
+    resp_b13.raise_for_status()
+    img_b13  = Image.open(BytesIO(resp_b13.content))
+    crop_b13 = img_b13.crop(CROP)
+
+    return crop_geo, crop_calculo, crop_b13, ts_str, ts_key, diurno
 
 
+# ── Cálculos ──────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=0)
 def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
     img = Image.open(BytesIO(img_bytes)).convert("L")
@@ -168,25 +239,52 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
     return results
 
 
-def color_nubosidad(pct: float) -> str:
-    if pct >= 75:   return "#4a90d9"
-    elif pct >= 50: return "#7fb3e0"
-    elif pct >= 25: return "#f0c040"
-    else:           return "#6abf6a"
+@st.cache_data(ttl=0)
+def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
+    img = Image.open(BytesIO(img_bytes_b13)).convert("RGB")
+
+    df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
+    dept_matrix  = df.values.astype(int)
+    mat_h, mat_w = dept_matrix.shape
+
+    if img.size != (mat_w, mat_h):
+        img = img.resize((mat_w, mat_h), Image.LANCZOS)
+
+    arr      = np.array(img)
+    mascaras = _mascaras_lluvia(arr)
+
+    results = []
+    for nombre, codigo in DEPARTAMENTOS.items():
+        mask_dept = dept_matrix == codigo
+        total     = int(np.sum(mask_dept))
+        if total == 0:
+            results.append((nombre, "Sin lluvia", 0.0))
+            continue
+
+        pcts = {cat: float(np.sum(m & mask_dept)) / total * 100
+                for cat, m in mascaras.items()}
+
+        categoria = "Sin lluvia"
+        for cat in ["Tormenta severa", "Tormenta fuerte", "Lluvia fuerte",
+                    "Lluvia moderada", "Lluvia leve"]:
+            if pcts[cat] >= LLUVIA_UMBRAL[cat]:
+                categoria = cat
+                break
+
+        pct_lluvia = 100.0 - pcts["Sin lluvia"]
+        results.append((nombre, categoria, round(pct_lluvia, 1)))
+
+    orden = {c: i for i, c in enumerate(reversed(LLUVIA_CATEGORIAS))}
+    results.sort(key=lambda x: (orden[x[1]], x[2]), reverse=True)
+    return results
 
 
-def imagen_a_bytes(img: Image.Image, fmt="PNG") -> bytes:
-    buf = BytesIO()
-    img.save(buf, format=fmt)
-    return buf.getvalue()
-
-
+# ── UI ────────────────────────────────────────────────────────────────────────
 try:
     sr_model = cargar_modelo_sr()
 
-    crop_geo, crop_calculo, ts_str, ts_key, diurno = cargar_imagen_satelital()
+    crop_geo, crop_calculo, crop_b13, ts_str, ts_key, diurno = cargar_imagen_satelital()
 
-    # Super-resolución solo para visualización
     with st.spinner("✨ Mejorando imagen..."):
         crop_display = mejorar_imagen(crop_geo, sr_model)
 
@@ -211,32 +309,65 @@ try:
 
     with col_tabla:
         st.markdown("<div style='margin-top: -2rem'>", unsafe_allow_html=True)
-        st.subheader("☁️ Nubosidad por departamento")
 
-        if not MAT_PATH.exists():
-            st.warning(
-                "No se encontró **matriz de departamentos.xlsx** en el directorio. "
-                "Subila al repositorio para activar el cálculo."
-            )
-        else:
-            try:
-                calculo_bytes = imagen_a_bytes(crop_calculo)
-                datos         = calcular_nubosidad(calculo_bytes, ts_key, diurno)
+        tab_nubes, tab_lluvia = st.tabs(["☁️ Nubosidad", "🌧️ Lluvia"])
 
-                for nombre, pct in datos:
-                    color = color_nubosidad(pct)
-                    st.markdown(
-                        f"""<div style='display:flex; justify-content:space-between;
-                            padding:4px 8px; margin:2px 0; border-radius:4px;
-                            background:{color}20; border-left:4px solid {color}'>
-                            <span>{nombre}</span>
-                            <strong>{pct:.1f}%</strong>
-                        </div>""",
-                        unsafe_allow_html=True,
-                    )
+        with tab_nubes:
+            st.subheader("☁️ Nubosidad por departamento")
+            if not MAT_PATH.exists():
+                st.warning(
+                    "No se encontró **matriz de departamentos.xlsx**. "
+                    "Subila al repositorio para activar el cálculo."
+                )
+            else:
+                try:
+                    calculo_bytes = imagen_a_bytes(crop_calculo)
+                    datos         = calcular_nubosidad(calculo_bytes, ts_key, diurno)
+                    for nombre, pct in datos:
+                        color = color_nubosidad(pct)
+                        st.markdown(
+                            f"""<div style='display:flex; justify-content:space-between;
+                                padding:4px 8px; margin:2px 0; border-radius:4px;
+                                background:{color}20; border-left:4px solid {color}'>
+                                <span>{nombre}</span>
+                                <strong>{pct:.1f}%</strong>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+                except Exception as e:
+                    st.error(f"Error en el cálculo de nubosidad: {e}")
 
-            except Exception as e:
-                st.error(f"Error en el cálculo: {e}")
+        with tab_lluvia:
+            st.subheader("🌧️ Probabilidad de lluvia por departamento")
+            st.caption("Basado en Band 13 IR (10.3 µm) · paleta BD Enhancement calibrada")
+            if not MAT_PATH.exists():
+                st.warning(
+                    "No se encontró **matriz de departamentos.xlsx**. "
+                    "Subila al repositorio para activar el cálculo."
+                )
+            else:
+                try:
+                    b13_bytes  = imagen_a_bytes(crop_b13)
+                    datos_lluv = calcular_lluvia(b13_bytes, ts_key)
+
+                    for nombre, categoria, pct_lluvia in datos_lluv:
+                        color = LLUVIA_COLORES[categoria]
+                        icono = LLUVIA_ICONOS[categoria]
+                        st.markdown(
+                            f"""<div style='display:flex; justify-content:space-between;
+                                align-items:center; padding:4px 8px; margin:2px 0;
+                                border-radius:4px; background:{color}20;
+                                border-left:4px solid {color}'>
+                                <span>{icono} {nombre}</span>
+                                <span style='text-align:right'>
+                                    <strong>{categoria}</strong>
+                                    <span style='color:#888; font-size:0.85em'> · {pct_lluvia:.0f}% cobertura</span>
+                                </span>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+                except Exception as e:
+                    st.error(f"Error en el cálculo de lluvia: {e}")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
