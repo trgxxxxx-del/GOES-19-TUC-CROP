@@ -275,19 +275,7 @@ def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
 
     if img.size != (mat_w, mat_h):
         img = img.resize((mat_w, mat_h), Image.LANCZOS)
-    @st.cache_data(ttl=0)
-def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
-    img = Image.open(BytesIO(img_bytes_b13)).convert("RGB")
-
-    df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
-    dept_matrix  = df.values.astype(int)
-    mat_h, mat_w = dept_matrix.shape
-
-    if img.size != (mat_w, mat_h):
-        img = img.resize((mat_w, mat_h), Image.LANCZOS)
-
-    # ↓ DEBUG - borrar después
-    st.write(f"DEBUG: img size = {img.size}, matriz shape = {dept_matrix.shape}")
+        st.write(f"DEBUG: img size = {img.size}, matriz shape = {dept_matrix.shape}")
     codigos, conteos = np.unique(dept_matrix, return_counts=True)
     st.write("Códigos en matriz:", dict(zip(codigos.tolist(), conteos.tolist())))
     mask_76 = dept_matrix == 76
@@ -296,11 +284,6 @@ def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
         st.write(f"San Miguel (76): filas {rows.min()}–{rows.max()}, cols {cols.min()}–{cols.max()}")
     else:
         st.write("San Miguel (76): NO ENCONTRADO en la matriz")
-    # ↑ DEBUG
-
-    arr      = np.array(img)
-    mascaras = _mascaras_lluvia(arr)
-    ...
     arr      = np.array(img)
     mascaras = _mascaras_lluvia(arr)
 
