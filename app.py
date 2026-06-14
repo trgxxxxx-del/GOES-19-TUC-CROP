@@ -267,6 +267,20 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
 
 @st.cache_data(ttl=0)
 def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
+    # DEBUG geométrico - agregar al inicio de calcular_lluvia
+st.write(f"DEBUG: img size = {img.size}, matriz shape = {dept_matrix.shape}")
+
+# Ver qué códigos existen en la matriz y cuántos píxeles tiene cada uno
+codigos, conteos = np.unique(dept_matrix, return_counts=True)
+st.write("Códigos en matriz:", dict(zip(codigos.tolist(), conteos.tolist())))
+
+# Ver la región donde debería estar San Miguel (código 76)
+mask_76 = dept_matrix == 76
+rows, cols = np.where(mask_76)
+if len(rows):
+    st.write(f"San Miguel (76): filas {rows.min()}–{rows.max()}, cols {cols.min()}–{cols.max()}")
+else:
+    st.write("San Miguel (76): NO ENCONTRADO en la matriz")
     img = Image.open(BytesIO(img_bytes_b13)).convert("RGB")
 
     df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
