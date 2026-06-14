@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance
 from datetime import datetime, timezone, timedelta
 import requests
 from io import BytesIO
@@ -66,6 +66,15 @@ def es_de_dia(dt_arg: datetime) -> bool:
     return 6 <= dt_arg.hour < 18
 
 
+def mejorar_imagen(img: Image.Image) -> Image.Image:
+    """Upscale 2x + sharpen + leve boost de contraste (similar a waifu2x 1x DeNoise)."""
+    w, h = img.size
+    img = img.resize((w * 2, h * 2), Image.LANCZOS)
+    img = img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=120, threshold=2))
+    img = ImageEnhance.Contrast(img).enhance(1.15)
+    return img
+
+
 @st.cache_data(ttl=600)
 def cargar_imagen_satelital():
     ahora_arg = datetime.now(TZ_ARG)
@@ -89,15 +98,18 @@ def cargar_imagen_satelital():
     img_geo  = Image.open(BytesIO(resp_geo.content))
     crop_geo = img_geo.crop(CROP)
 
+    # Imagen mejorada solo para visualización
+    crop_geo_display = mejorar_imagen(crop_geo)
+
     if diurno:
-        crop_calculo = crop_geo
+        crop_calculo = crop_geo  # original sin escalar para el cálculo
     else:
         resp_night   = requests.get(URL_NIGHT, timeout=120)
         resp_night.raise_for_status()
         img_night    = Image.open(BytesIO(resp_night.content))
         crop_calculo = img_night.crop(CROP)
 
-    return crop_geo, crop_calculo, ts_str, ts_key, diurno
+    return crop_geo_display, crop_calculo, ts_str, ts_key, diurno
 
 
 @st.cache_data(ttl=0)
@@ -140,7 +152,7 @@ def imagen_a_bytes(img: Image.Image, fmt="PNG") -> bytes:
 
 
 try:
-    crop_geo, crop_calculo, ts_str, ts_key, diurno = cargar_imagen_satelital()
+    crop_geo_display, crop_calculo, ts_str, ts_key, diurno = cargar_imagen_satelital()
 
     modo = "☀️ GEOCOLOR (día)" if diurno else "🌙 Day/Night Cloud Combo (noche)"
     st.caption(f"🕐 Última actualización: **{ts_str}** · {modo}")
@@ -152,10 +164,10 @@ try:
     col_img, col_tabla = st.columns([1, 1])
 
     with col_img:
-        st.image(crop_geo, use_container_width=True)
+        st.image(crop_geo_display, use_container_width=True)
         st.download_button(
-            label="⬇️ Descargar imagen (215×216 px)",
-            data=imagen_a_bytes(crop_geo, fmt="PNG"),
+            label="⬇️ Descargar imagen mejorada",
+            data=imagen_a_bytes(crop_geo_display, fmt="PNG"),
             file_name="tucuman_satelital.png",
             mime="image/png",
             use_container_width=False
