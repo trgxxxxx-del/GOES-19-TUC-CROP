@@ -20,7 +20,7 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stImage"] img {
-        max-width: 720px !important;
+        max-width: 700px !important;
         display: block;
         margin: auto;
     }
@@ -53,13 +53,16 @@ TZ_ARG          = timezone(timedelta(hours=-3))
 # Amarillo    R≈232  G≈231  B≈3    → Lluvia fuerte      (tops −45/−55°C)
 # Verde       R≈107  G≈231  B≈9    → Lluvia moderada   (tops −35/−45°C)
 # Azul oscuro R≈17   G≈34   B≈128  → Lluvia leve       (tops −20/−35°C)
+# Cian        R≈35   G≈183  B≈208  → Nubosidad alta    (tops fríos)
 # Gris        R≈G≈B              → Sin lluvia
+
 LLUVIA_CATEGORIAS = [
     "Tormenta severa",
     "Tormenta fuerte",
     "Lluvia fuerte",
     "Lluvia moderada",
     "Lluvia leve",
+    "Nubosidad alta",
     "Sin lluvia",
 ]
 LLUVIA_COLORES = {
@@ -68,6 +71,7 @@ LLUVIA_COLORES = {
     "Lluvia fuerte":   "#e8e703",
     "Lluvia moderada": "#6be709",
     "Lluvia leve":     "#1122c0",
+    "Nubosidad alta":  "#23b8d4",
     "Sin lluvia":      "#6abf6a",
 }
 LLUVIA_ICONOS = {
@@ -76,15 +80,16 @@ LLUVIA_ICONOS = {
     "Lluvia fuerte":   "🌧️",
     "Lluvia moderada": "🌦️",
     "Lluvia leve":     "🌂",
-    "Sin lluvia":      "☀️",
+    "Nubosidad alta":  "🌥️",
+    "Sin lluvia":      "",
 }
-# Cobertura mínima del departamento para asignar la categoría
 LLUVIA_UMBRAL = {
     "Tormenta severa": 3,
     "Tormenta fuerte": 5,
     "Lluvia fuerte":   10,
     "Lluvia moderada": 10,
     "Lluvia leve":     10,
+    "Nubosidad alta":  10,
 }
 
 # ── Departamentos ─────────────────────────────────────────────────────────────
@@ -162,7 +167,8 @@ def _mascaras_lluvia(arr: np.ndarray) -> dict:
         "Tormenta fuerte": (R > 180) & (G >= 80) & (G < 160) & (B < 80),
         "Lluvia fuerte":   (R > 180) & (G >= 160) & (B < 80),
         "Lluvia moderada": (G > 150) & (R < 150) & (B <  80),
-        "Lluvia leve":     (B > 80)  & (R <  80) & (G <  80),
+        "Lluvia leve":     (B > 100) & (R <  80) & (G <  80),
+        "Nubosidad alta":  (B > 150) & (G > 100) & (R < 120),
     }
     clasificado = np.zeros(arr.shape[:2], dtype=bool)
     for m in mascaras.values():
@@ -203,7 +209,6 @@ def cargar_imagen_satelital():
         img_night    = Image.open(BytesIO(resp_night.content))
         crop_calculo = img_night.crop(CROP)
 
-    # Band 13 siempre, independiente de día/noche
     resp_b13 = requests.get(URL_BAND13, timeout=120)
     resp_b13.raise_for_status()
     img_b13  = Image.open(BytesIO(resp_b13.content))
@@ -258,7 +263,7 @@ def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
         mask_dept = dept_matrix == codigo
         total     = int(np.sum(mask_dept))
         if total == 0:
-            results.append((nombre, "Sin lluvia", 0.0))
+            results.append((nombre, "Sin lluvia"))
             continue
 
         pcts = {cat: float(np.sum(m & mask_dept)) / total * 100
@@ -266,16 +271,15 @@ def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
 
         categoria = "Sin lluvia"
         for cat in ["Tormenta severa", "Tormenta fuerte", "Lluvia fuerte",
-                    "Lluvia moderada", "Lluvia leve"]:
+                    "Lluvia moderada", "Lluvia leve", "Nubosidad alta"]:
             if pcts[cat] >= LLUVIA_UMBRAL[cat]:
                 categoria = cat
                 break
 
-        pct_lluvia = 100.0 - pcts["Sin lluvia"]
-        results.append((nombre, categoria, round(pct_lluvia, 1)))
+        results.append((nombre, categoria))
 
     orden = {c: i for i, c in enumerate(reversed(LLUVIA_CATEGORIAS))}
-    results.sort(key=lambda x: (orden[x[1]], x[2]), reverse=True)
+    results.sort(key=lambda x: orden[x[1]], reverse=True)
     return results
 
 
@@ -339,7 +343,7 @@ try:
 
         with tab_lluvia:
             st.subheader("🌧️ Probabilidad de lluvia por departamento")
-            
+            st.caption("Basado en Band 13 IR (10.3 µm) · paleta BD Enhancement calibrada")
             if not MAT_PATH.exists():
                 st.warning(
                     "No se encontró **matriz de departamentos.xlsx**. "
@@ -350,7 +354,7 @@ try:
                     b13_bytes  = imagen_a_bytes(crop_b13)
                     datos_lluv = calcular_lluvia(b13_bytes, ts_key)
 
-                    for nombre, categoria, pct_lluvia in datos_lluv:
+                    for nombre, categoria in datos_lluv:
                         color = LLUVIA_COLORES[categoria]
                         icono = LLUVIA_ICONOS[categoria]
                         st.markdown(
@@ -359,7 +363,7 @@ try:
                                 border-radius:4px; background:{color}20;
                                 border-left:4px solid {color}'>
                                 <span>{nombre}</span>
-                                <strong>{categoria}</strong>
+                                <strong>{icono} {categoria}</strong>
                             </div>""",
                             unsafe_allow_html=True,
                         )
