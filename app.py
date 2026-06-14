@@ -106,8 +106,8 @@ LLUVIA_ICONOS = {
 LLUVIA_UMBRAL = {
     "Tormenta severa": 3,
     "Tormenta fuerte": 5,
-    "Lluvia fuerte":   10,
-    "Lluvia moderada": 10,
+    "Lluvia fuerte":   8,
+    "Lluvia moderada": 20,   
     "Lluvia leve":     10,
     "Nubosidad alta":  10,
 }
@@ -186,10 +186,12 @@ def _mascaras_lluvia(arr: np.ndarray) -> dict:
         "Tormenta severa": (R > 180) & (G <  80) & (B <  80),
         "Tormenta fuerte": (R > 180) & (G >= 80) & (G < 160) & (B < 80),
         "Lluvia fuerte":   (R > 180) & (G >= 160) & (B < 80),
-        "Lluvia moderada": (G > 150) & (R < 150) & (B <  80),
+        # Verde más estricto: G debe dominar claramente sobre R y B
+        "Lluvia moderada": (G > 180) & (R < 120) & (B < 60),
         "Lluvia leve":     (B > 100) & (R <  80) & (G <  80),
         "Nubosidad alta":  (B > 150) & (G > 100) & (R < 120),
     }
+    
     clasificado = np.zeros(arr.shape[:2], dtype=bool)
     for m in mascaras.values():
         clasificado |= m
