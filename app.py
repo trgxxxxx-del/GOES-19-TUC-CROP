@@ -332,7 +332,7 @@ try:
         )
 
     with col_tabla:
-        st.markdown("<div style='margin-top: -2rem'>", unsafe_allow_html=True)
+
 
         tab_nubes, tab_lluvia = st.tabs(["☁️ Nubosidad", "🌧️ Lluvia"])
 
