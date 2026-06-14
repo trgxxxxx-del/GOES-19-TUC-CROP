@@ -358,7 +358,7 @@ try:
                                 align-items:center; padding:4px 8px; margin:2px 0;
                                 border-radius:4px; background:{color}20;
                                 border-left:4px solid {color}'>
-                                <span>{icono} {nombre}</span>
+                                <span>{nombre}</span>
                                 <strong>{categoria}</strong>
                             </div>""",
                             unsafe_allow_html=True,
