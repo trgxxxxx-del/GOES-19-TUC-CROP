@@ -20,7 +20,7 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stImage"] img {
-        max-width: 600px !important;
+        max-width: 620px !important;
         display: block;
         margin: auto;
     }
