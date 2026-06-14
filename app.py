@@ -152,12 +152,12 @@ try:
     with col_img:
         st.image(crop_geo, use_container_width=True)
         st.download_button(
-            label="⬇️ Descargar imagen (215×216 px)",
-            data=imagen_a_bytes(crop_geo, fmt="PNG"),
-            file_name="tucuman_satelital.png",
-            mime="image/png",
-            use_container_width=True
-        )
+           label="⬇️ Descargar imagen (215×216 px)",
+           data=imagen_a_bytes(crop_geo, fmt="PNG"),
+           file_name="tucuman_satelital.png",
+          mime="image/png",
+          use_container_width=False
+)
 
     with col_tabla:
         st.subheader("☁️ Nubosidad por departamento")
