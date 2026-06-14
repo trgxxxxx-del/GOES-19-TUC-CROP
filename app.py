@@ -33,7 +33,27 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🛰️ Imágen satelital de Tucumán")
-
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    [data-testid="stImage"] img {
+        max-width: 700px !important;
+        display: block;
+        margin: auto;
+    }
+    div[data-testid="column"]:first-child {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding-top: 3rem;        /* ← imagen baja */
+    }
+    div[data-testid="column"]:last-child {
+        margin-top: -3rem;        /* ← tabla sube */
+    }
+    </style>
+""", unsafe_allow_html=True)
 # ── URLs ─────────────────────────────────────────────────────────────────────
 URL_GEOCOLOR = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
 URL_NIGHT    = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/16/7200x4320.jpg"
