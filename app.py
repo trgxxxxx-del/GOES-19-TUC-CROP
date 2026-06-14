@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter
 from datetime import datetime, timezone, timedelta
 import requests
 from io import BytesIO
