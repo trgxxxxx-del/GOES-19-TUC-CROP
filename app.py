@@ -47,13 +47,14 @@ st.markdown("""
         display: flex;
         flex-direction: column;
         justify-content: center;
-        padding-top: 3rem;        /* ← imagen baja */
+        padding-top: 3rem;
     }
     div[data-testid="column"]:last-child {
-        margin-top: -3rem;        /* ← tabla sube */
+        margin-top: -3rem;
     }
     </style>
 """, unsafe_allow_html=True)
+
 # ── URLs ─────────────────────────────────────────────────────────────────────
 URL_GEOCOLOR = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
 URL_NIGHT    = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/16/7200x4320.jpg"
@@ -107,9 +108,9 @@ LLUVIA_UMBRAL = {
     "Tormenta severa": 3,
     "Tormenta fuerte": 5,
     "Lluvia fuerte":   8,
-    "Lluvia moderada": 20,   
-    "Lluvia leve": (B > 90) & (R < 60) & (G < 120),  # G hasta 120, no 80
-    "Nubosidad alta": (B > 150) & (G > 120) & (R < 80),  # G más alto para separar de azul oscuro
+    "Lluvia moderada": 20,
+    "Lluvia leve":     10,
+    "Nubosidad alta":  10,
 }
 
 # ── Departamentos ─────────────────────────────────────────────────────────────
@@ -186,12 +187,10 @@ def _mascaras_lluvia(arr: np.ndarray) -> dict:
         "Tormenta severa": (R > 180) & (G <  80) & (B <  80),
         "Tormenta fuerte": (R > 180) & (G >= 80) & (G < 160) & (B < 80),
         "Lluvia fuerte":   (R > 180) & (G >= 160) & (B < 80),
-        # Verde más estricto: G debe dominar claramente sobre R y B
         "Lluvia moderada": (G > 180) & (R < 120) & (B < 60),
-        "Lluvia leve":     (B > 100) & (R <  80) & (G <  80),
-        "Nubosidad alta":  (B > 150) & (G > 100) & (R < 120),
+        "Lluvia leve":     (B > 90)  & (R <  60) & (G < 120),
+        "Nubosidad alta":  (B > 150) & (G > 120) & (R <  80),
     }
-    
     clasificado = np.zeros(arr.shape[:2], dtype=bool)
     for m in mascaras.values():
         clasificado |= m
@@ -335,7 +334,6 @@ try:
 
     with col_tabla:
 
-
         tab_nubes, tab_lluvia = st.tabs(["☁️ Nubosidad", "🌧️ Lluvia"])
 
         with tab_nubes:
@@ -365,7 +363,7 @@ try:
 
         with tab_lluvia:
             st.subheader("🌧️ Probabilidad de lluvia por departamento")
-            
+
             if not MAT_PATH.exists():
                 st.warning(
                     "No se encontró **matriz de departamentos.xlsx**. "
