@@ -1,4 +1,3 @@
-
 import streamlit as st
 from PIL import Image
 from datetime import datetime, timezone, timedelta
@@ -20,9 +19,14 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stImage"] img {
-        max-width: 660px !important;
+        max-width: 400px !important;
         display: block;
         margin: auto;
+    }
+    div[data-testid="column"]:first-child {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -67,7 +71,6 @@ def cargar_imagen_satelital():
     ahora_arg = datetime.now(TZ_ARG)
     diurno    = es_de_dia(ahora_arg)
 
-    # Siempre se descarga GEOCOLOR para mostrar en pantalla
     resp_geo = requests.get(URL_GEOCOLOR, timeout=120)
     resp_geo.raise_for_status()
 
@@ -86,7 +89,6 @@ def cargar_imagen_satelital():
     img_geo  = Image.open(BytesIO(resp_geo.content))
     crop_geo = img_geo.crop(CROP)
 
-    # Para el cálculo de nubosidad: de noche se usa el canal Night
     if diurno:
         crop_calculo = crop_geo
     else:
@@ -147,19 +149,20 @@ try:
         st.cache_data.clear()
         st.rerun()
 
-    col_img, col_tabla = st.columns([2, 1])
+    col_img, col_tabla = st.columns([1, 2])
 
     with col_img:
         st.image(crop_geo, use_container_width=True)
         st.download_button(
-           label="⬇️ Descargar imagen (215×216 px)",
-           data=imagen_a_bytes(crop_geo, fmt="PNG"),
-           file_name="tucuman_satelital.png",
-          mime="image/png",
-          use_container_width=False
-)
+            label="⬇️ Descargar imagen (215×216 px)",
+            data=imagen_a_bytes(crop_geo, fmt="PNG"),
+            file_name="tucuman_satelital.png",
+            mime="image/png",
+            use_container_width=False
+        )
 
     with col_tabla:
+        st.markdown("<div style='margin-top: -2rem'>", unsafe_allow_html=True)
         st.subheader("☁️ Nubosidad por departamento")
 
         if not MAT_PATH.exists():
@@ -186,6 +189,8 @@ try:
 
             except Exception as e:
                 st.error(f"Error en el cálculo: {e}")
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
 except Exception as e:
     st.error(f"⚠️ Error al cargar la imagen: {e}")
