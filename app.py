@@ -183,13 +183,20 @@ def color_nubosidad(pct: float) -> str:
 
 def _mascaras_lluvia(arr: np.ndarray) -> dict:
     R, G, B = arr[:,:,0], arr[:,:,1], arr[:,:,2]
+    # Paleta BD Enhancement calibrada con valores reales GOES-19:
+    # Rojo     R=231 G=31  B=14  → Tormenta severa
+    # Naranja  R=237 G=117 B=5   → Tormenta fuerte
+    # Amarillo R=225 G=243 B=4   → Lluvia fuerte
+    # Verde    R=68  G=176 B=19  → Lluvia moderada
+    # Azul     R=18  G=44  B=119 → Lluvia leve
+    # Cian     R=70  G=168 B=204 → Nubosidad alta
     mascaras = {
-        "Tormenta severa": (R > 180) & (G <  80) & (B <  80),
-        "Tormenta fuerte": (R > 180) & (G >= 80) & (G < 160) & (B < 80),
-        "Lluvia fuerte":   (R > 180) & (G >= 160) & (B < 80),
-        "Lluvia moderada": (G > 180) & (R < 120) & (B < 60),
-        "Lluvia leve":     (B > 90)  & (R <  60) & (G < 120),
-        "Nubosidad alta":  (B > 150) & (G > 120) & (R <  80),
+        "Tormenta severa": (R > 180) & (G <  70) & (B <  50),
+        "Tormenta fuerte": (R > 180) & (G >= 70) & (G < 160) & (B < 30),
+        "Lluvia fuerte":   (R > 180) & (G >= 160) & (B < 30),
+        "Lluvia moderada": (G > 120) & (R < 120) & (B <  60),
+        "Lluvia leve":     (B >  70) & (R <  50) & (G < 110),
+        "Nubosidad alta":  (B > 150) & (G > 120) & (R < 120),
     }
     clasificado = np.zeros(arr.shape[:2], dtype=bool)
     for m in mascaras.values():
@@ -275,15 +282,7 @@ def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
 
     if img.size != (mat_w, mat_h):
         img = img.resize((mat_w, mat_h), Image.LANCZOS)
-        st.write(f"DEBUG: img size = {img.size}, matriz shape = {dept_matrix.shape}")
-    codigos, conteos = np.unique(dept_matrix, return_counts=True)
-    st.write("Códigos en matriz:", dict(zip(codigos.tolist(), conteos.tolist())))
-    mask_76 = dept_matrix == 76
-    rows, cols = np.where(mask_76)
-    if len(rows):
-        st.write(f"San Miguel (76): filas {rows.min()}–{rows.max()}, cols {cols.min()}–{cols.max()}")
-    else:
-        st.write("San Miguel (76): NO ENCONTRADO en la matriz")
+
     arr      = np.array(img)
     mascaras = _mascaras_lluvia(arr)
 
