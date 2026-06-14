@@ -359,10 +359,7 @@ try:
                                 border-radius:4px; background:{color}20;
                                 border-left:4px solid {color}'>
                                 <span>{icono} {nombre}</span>
-                                <span style='text-align:right'>
-                                    <strong>{categoria}</strong>
-                                    <span style='color:#888; font-size:0.85em'> · {pct_lluvia:.0f}% cobertura</span>
-                                </span>
+                                <strong>{categoria}</strong>
                             </div>""",
                             unsafe_allow_html=True,
                         )
