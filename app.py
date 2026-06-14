@@ -19,6 +19,11 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
+    [data-testid="stImage"] img {
+        max-width: 400px !important;
+        display: block;
+        margin: auto;
+    }
     </style>
 """, unsafe_allow_html=True)
 
