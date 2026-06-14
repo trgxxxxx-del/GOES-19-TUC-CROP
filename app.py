@@ -149,7 +149,7 @@ try:
         st.cache_data.clear()
         st.rerun()
 
-    col_img, col_tabla = st.columns([1, 2])
+    col_img, col_tabla = st.columns([1, 1])
 
     with col_img:
         st.image(crop_geo, use_container_width=True)
