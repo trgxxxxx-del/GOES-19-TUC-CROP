@@ -108,8 +108,8 @@ LLUVIA_UMBRAL = {
     "Tormenta fuerte": 5,
     "Lluvia fuerte":   8,
     "Lluvia moderada": 20,   
-    "Lluvia leve":     10,
-    "Nubosidad alta":  10,
+    "Lluvia leve": (B > 90) & (R < 60) & (G < 120),  # G hasta 120, no 80
+    "Nubosidad alta": (B > 150) & (G > 120) & (R < 80),  # G más alto para separar de azul oscuro
 }
 
 # ── Departamentos ─────────────────────────────────────────────────────────────
