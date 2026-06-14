@@ -339,7 +339,7 @@ try:
 
         with tab_lluvia:
             st.subheader("🌧️ Probabilidad de lluvia por departamento")
-            st.caption("Basado en Band 13 IR (10.3 µm) · paleta BD Enhancement calibrada")
+            
             if not MAT_PATH.exists():
                 st.warning(
                     "No se encontró **matriz de departamentos.xlsx**. "
