@@ -1,10 +1,11 @@
 import streamlit as st
-from PIL import Image, ImageFilter, ImageEnhance
+from PIL import Image
 from datetime import datetime, timezone, timedelta
 import requests
 from io import BytesIO
 import numpy as np
 import pandas as pd
+import cv2
 from pathlib import Path
 
 st.set_page_config(
@@ -33,12 +34,13 @@ st.markdown("""
 
 st.title("🛰️ Imágen satelital de Tucumán")
 
-URL_GEOCOLOR = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
-URL_NIGHT    = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/16/7200x4320.jpg"
+URL_GEOCOLOR    = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
+URL_NIGHT       = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/16/7200x4320.jpg"
 CROP            = (2717, 1382, 2932, 1600)
 THRESHOLD_DIA   = 110
 THRESHOLD_NOCHE = 110
 MAT_PATH        = Path("matriz de departamentos.xlsx")
+MODEL_PATH      = Path("LapSRN_x2.pb")
 TZ_ARG          = timezone(timedelta(hours=-3))
 
 DEPARTAMENTOS = {
@@ -66,13 +68,25 @@ def es_de_dia(dt_arg: datetime) -> bool:
     return 6 <= dt_arg.hour < 18
 
 
-def mejorar_imagen(img: Image.Image) -> Image.Image:
-    """Upscale 2x + sharpen + leve boost de contraste (similar a waifu2x 1x DeNoise)."""
-    w, h = img.size
-    img = img.resize((w * 2, h * 2), Image.LANCZOS)
-    img = img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=120, threshold=2))
-    img = ImageEnhance.Contrast(img).enhance(1.15)
-    return img
+@st.cache_resource
+def cargar_modelo_sr():
+    """Carga el modelo LapSRN x2 una sola vez en memoria."""
+    if not MODEL_PATH.exists():
+        return None
+    sr = cv2.dnn_superres.DnnSuperResImpl_create()
+    sr.readModel(str(MODEL_PATH))
+    sr.setModel("lapsrn", 2)
+    return sr
+
+
+def mejorar_imagen(img: Image.Image, sr_model) -> Image.Image:
+    """Super-resolución x2 con LapSRN. Fallback a LANCZOS si no hay modelo."""
+    if sr_model is None:
+        w, h = img.size
+        return img.resize((w * 2, h * 2), Image.LANCZOS)
+    arr    = np.array(img.convert("RGB"))
+    result = sr_model.upsample(arr)
+    return Image.fromarray(result)
 
 
 @st.cache_data(ttl=600)
@@ -88,9 +102,9 @@ def cargar_imagen_satelital():
         dt_utc = datetime.strptime(
             last_modified, "%a, %d %b %Y %H:%M:%S %Z"
         ).replace(tzinfo=timezone.utc)
-        dt_arg  = dt_utc.astimezone(TZ_ARG)
-        ts_str  = dt_arg.strftime("%-d de %B %Y, %H:%M hs (Argentina)")
-        ts_key  = last_modified
+        dt_arg = dt_utc.astimezone(TZ_ARG)
+        ts_str = dt_arg.strftime("%-d de %B %Y, %H:%M hs (Argentina)")
+        ts_key = last_modified
     else:
         ts_str = "—"
         ts_key = ""
@@ -98,18 +112,15 @@ def cargar_imagen_satelital():
     img_geo  = Image.open(BytesIO(resp_geo.content))
     crop_geo = img_geo.crop(CROP)
 
-    # Imagen mejorada solo para visualización
-    crop_geo_display = mejorar_imagen(crop_geo)
-
     if diurno:
-        crop_calculo = crop_geo  # original sin escalar para el cálculo
+        crop_calculo = crop_geo
     else:
         resp_night   = requests.get(URL_NIGHT, timeout=120)
         resp_night.raise_for_status()
         img_night    = Image.open(BytesIO(resp_night.content))
         crop_calculo = img_night.crop(CROP)
 
-    return crop_geo_display, crop_calculo, ts_str, ts_key, diurno
+    return crop_geo, crop_calculo, ts_str, ts_key, diurno
 
 
 @st.cache_data(ttl=0)
@@ -152,7 +163,13 @@ def imagen_a_bytes(img: Image.Image, fmt="PNG") -> bytes:
 
 
 try:
-    crop_geo_display, crop_calculo, ts_str, ts_key, diurno = cargar_imagen_satelital()
+    sr_model = cargar_modelo_sr()
+
+    crop_geo, crop_calculo, ts_str, ts_key, diurno = cargar_imagen_satelital()
+
+    # Super-resolución solo para visualización
+    with st.spinner("✨ Mejorando imagen..."):
+        crop_display = mejorar_imagen(crop_geo, sr_model)
 
     modo = "☀️ GEOCOLOR (día)" if diurno else "🌙 Day/Night Cloud Combo (noche)"
     st.caption(f"🕐 Última actualización: **{ts_str}** · {modo}")
@@ -164,10 +181,10 @@ try:
     col_img, col_tabla = st.columns([1, 1])
 
     with col_img:
-        st.image(crop_geo_display, use_container_width=True)
+        st.image(crop_display, use_container_width=True)
         st.download_button(
             label="⬇️ Descargar imagen mejorada",
-            data=imagen_a_bytes(crop_geo_display, fmt="PNG"),
+            data=imagen_a_bytes(crop_display, fmt="PNG"),
             file_name="tucuman_satelital.png",
             mime="image/png",
             use_container_width=False
