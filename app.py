@@ -267,20 +267,16 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
 
 @st.cache_data(ttl=0)
 def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
-    # DEBUG geométrico - agregar al inicio de calcular_lluvia
-    st.write(f"DEBUG: img size = {img.size}, matriz shape = {dept_matrix.shape}")
+    img = Image.open(BytesIO(img_bytes_b13)).convert("RGB")
 
-# Ver qué códigos existen en la matriz y cuántos píxeles tiene cada uno
-    codigos, conteos = np.unique(dept_matrix, return_counts=True)
-    st.write("Códigos en matriz:", dict(zip(codigos.tolist(), conteos.tolist())))
+    df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
+    dept_matrix  = df.values.astype(int)
+    mat_h, mat_w = dept_matrix.shape
 
-# Ver la región donde debería estar San Miguel (código 76)
-    mask_76 = dept_matrix == 76
-    rows, cols = np.where(mask_76)
-if len(rows):
-    st.write(f"San Miguel (76): filas {rows.min()}–{rows.max()}, cols {cols.min()}–{cols.max()}")
-else:
-    st.write("San Miguel (76): NO ENCONTRADO en la matriz")
+    if img.size != (mat_w, mat_h):
+        img = img.resize((mat_w, mat_h), Image.LANCZOS)
+    @st.cache_data(ttl=0)
+def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
     img = Image.open(BytesIO(img_bytes_b13)).convert("RGB")
 
     df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
@@ -290,6 +286,21 @@ else:
     if img.size != (mat_w, mat_h):
         img = img.resize((mat_w, mat_h), Image.LANCZOS)
 
+    # ↓ DEBUG - borrar después
+    st.write(f"DEBUG: img size = {img.size}, matriz shape = {dept_matrix.shape}")
+    codigos, conteos = np.unique(dept_matrix, return_counts=True)
+    st.write("Códigos en matriz:", dict(zip(codigos.tolist(), conteos.tolist())))
+    mask_76 = dept_matrix == 76
+    rows, cols = np.where(mask_76)
+    if len(rows):
+        st.write(f"San Miguel (76): filas {rows.min()}–{rows.max()}, cols {cols.min()}–{cols.max()}")
+    else:
+        st.write("San Miguel (76): NO ENCONTRADO en la matriz")
+    # ↑ DEBUG
+
+    arr      = np.array(img)
+    mascaras = _mascaras_lluvia(arr)
+    ...
     arr      = np.array(img)
     mascaras = _mascaras_lluvia(arr)
 
@@ -315,11 +326,6 @@ else:
 
     orden = {c: i for i, c in enumerate(reversed(LLUVIA_CATEGORIAS))}
     results.sort(key=lambda x: orden[x[1]], reverse=True)
-    # Agregar justo antes del return results
-    mask_smt = dept_matrix == 76
-    total_smt = int(np.sum(mask_smt))
-    pcts_smt = {cat: float(np.sum(m & mask_smt)) / total_smt * 100 for cat, m in mascaras.items()}
-    st.write("DEBUG San Miguel %:", {k: f"{v:.1f}%" for k, v in pcts_smt.items()})
     return results
 
 
