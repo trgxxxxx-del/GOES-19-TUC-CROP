@@ -301,6 +301,11 @@ def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
 
     orden = {c: i for i, c in enumerate(reversed(LLUVIA_CATEGORIAS))}
     results.sort(key=lambda x: orden[x[1]], reverse=True)
+    # Agregar justo antes del return results
+    mask_smt = dept_matrix == 76
+    total_smt = int(np.sum(mask_smt))
+    pcts_smt = {cat: float(np.sum(m & mask_smt)) / total_smt * 100 for cat, m in mascaras.items()}
+    st.write("DEBUG San Miguel %:", {k: f"{v:.1f}%" for k, v in pcts_smt.items()})
     return results
 
 
