@@ -1,11 +1,10 @@
 import streamlit as st
-from PIL import Image
+from PIL import ImageEnhance, ImageFilter
 from datetime import datetime, timezone, timedelta
 import requests
 from io import BytesIO
 import numpy as np
 import pandas as pd
-import cv2
 from pathlib import Path
 
 st.set_page_config(
@@ -79,15 +78,35 @@ def cargar_modelo_sr():
     return sr
 
 
+from PIL import ImageEnhance, ImageFilter
+import numpy as np
+import cv2
+
 def mejorar_imagen(img: Image.Image, sr_model) -> Image.Image:
-    """Super-resolución x2 con LapSRN. Fallback a LANCZOS si no hay modelo."""
+    # 1. Upscale base (LapSRN o LANCZOS, como ya tenés)
     if sr_model is None:
         w, h = img.size
-        return img.resize((w * 2, h * 2), Image.LANCZOS)
-    arr    = np.array(img.convert("RGB"))
-    result = sr_model.upsample(arr)
-    return Image.fromarray(result)
+        img = img.resize((w * 2, h * 2), Image.LANCZOS)
+    else:
+        arr    = np.array(img.convert("RGB"))
+        result = sr_model.upsample(arr)
+        img    = Image.fromarray(result)
 
+    # 2. Reducir ruido JPEG (bilateral filter — preserva bordes)
+    arr = np.array(img)
+    arr = cv2.bilateralFilter(arr, d=5, sigmaColor=30, sigmaSpace=30)
+    img = Image.fromarray(arr)
+
+    # 3. Sharpen suave (unsharp mask)
+    img = img.filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=3))
+
+    # 4. Contraste leve
+    img = ImageEnhance.Contrast(img).enhance(1.15)
+
+    # 5. Saturación leve (solo para GEOCOLOR diurno)
+    img = ImageEnhance.Color(img).enhance(1.2)
+
+    return img
 
 @st.cache_data(ttl=600)
 def cargar_imagen_satelital():
