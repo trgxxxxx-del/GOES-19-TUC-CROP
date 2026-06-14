@@ -28,25 +28,6 @@ st.markdown("""
         display: flex;
         flex-direction: column;
         justify-content: center;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-st.title("🛰️ Imágen satelital de Tucumán")
-st.markdown("""
-    <style>
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
-    [data-testid="stImage"] img {
-        max-width: 750px !important;
-        display: block;
-        margin: auto;
-    }
-    div[data-testid="column"]:first-child {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
         padding-top: 3rem;
     }
     div[data-testid="column"]:last-child {
@@ -54,6 +35,8 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
+st.title("🛰️ Imágen satelital de Tucumán")
 
 # ── URLs ─────────────────────────────────────────────────────────────────────
 URL_GEOCOLOR = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/GEOCOLOR/7200x4320.jpg"
@@ -68,14 +51,13 @@ MAT_PATH        = Path("matriz de departamentos.xlsx")
 MODEL_PATH      = Path("LapSRN_x2.pb")
 TZ_ARG          = timezone(timedelta(hours=-3))
 
-# ── Paleta BD Enhancement Band 13 – valores RGB calibrados ───────────────────
-# Rojo        R≈230  G≈39   B≈14   → Tormenta severa   (tops < −65°C)
-# Naranja     R≈237  G≈122  B≈5    → Tormenta fuerte   (tops −55/−65°C)
-# Amarillo    R≈232  G≈231  B≈3    → Lluvia fuerte      (tops −45/−55°C)
-# Verde       R≈107  G≈231  B≈9    → Lluvia moderada   (tops −35/−45°C)
-# Azul oscuro R≈17   G≈34   B≈128  → Lluvia leve       (tops −20/−35°C)
-# Cian        R≈35   G≈183  B≈208  → Nubosidad alta    (tops fríos)
-# Gris        R≈G≈B              → Sin lluvia
+# ── Paleta BD Enhancement Band 13 – valores RGB reales GOES-19 ───────────────
+# Rojo     R=231 G=31  B=14  → Tormenta severa   (tops < −65°C)
+# Naranja  R=237 G=117 B=5   → Tormenta fuerte   (tops −55/−65°C)
+# Amarillo R=225 G=243 B=4   → Lluvia fuerte      (tops −45/−55°C)
+# Verde    R=68  G=176 B=19  → Lluvia moderada   (tops −35/−45°C)
+# Azul     R=18  G=44  B=119 → Lluvia leve       (tops −20/−35°C)
+# Gris     R≈G≈B            → Sin lluvia
 
 LLUVIA_CATEGORIAS = [
     "Tormenta severa",
@@ -83,7 +65,6 @@ LLUVIA_CATEGORIAS = [
     "Lluvia fuerte",
     "Lluvia moderada",
     "Lluvia leve",
-    "Nubosidad alta",
     "Sin lluvia",
 ]
 LLUVIA_COLORES = {
@@ -92,7 +73,6 @@ LLUVIA_COLORES = {
     "Lluvia fuerte":   "#e8e703",
     "Lluvia moderada": "#6be709",
     "Lluvia leve":     "#1122c0",
-    "Nubosidad alta":  "#23b8d4",
     "Sin lluvia":      "#6abf6a",
 }
 LLUVIA_ICONOS = {
@@ -101,7 +81,6 @@ LLUVIA_ICONOS = {
     "Lluvia fuerte":   "🌧️",
     "Lluvia moderada": "🌦️",
     "Lluvia leve":     "🌂",
-    "Nubosidad alta":  "🌥️",
     "Sin lluvia":      "",
 }
 LLUVIA_UMBRAL = {
@@ -110,7 +89,6 @@ LLUVIA_UMBRAL = {
     "Lluvia fuerte":   8,
     "Lluvia moderada": 20,
     "Lluvia leve":     10,
-    "Nubosidad alta":  10,
 }
 
 # ── Departamentos ─────────────────────────────────────────────────────────────
@@ -189,14 +167,12 @@ def _mascaras_lluvia(arr: np.ndarray) -> dict:
     # Amarillo R=225 G=243 B=4   → Lluvia fuerte
     # Verde    R=68  G=176 B=19  → Lluvia moderada
     # Azul     R=18  G=44  B=119 → Lluvia leve
-    # Cian     R=70  G=168 B=204 → Nubosidad alta
     mascaras = {
         "Tormenta severa": (R > 180) & (G <  70) & (B <  50),
         "Tormenta fuerte": (R > 180) & (G >= 70) & (G < 160) & (B < 30),
-        "Lluvia moderada":   (R > 180) & (G >= 160) & (B < 30),
-        "Lluvia leve": (R < 120) & (G > 120) &  (B <  60),
-        "Nubosidad alta":     (R <  50)  & (G < 110) & (B >  70),
-        "Nubosidad baja":  (R < 120) & (G > 120) & (B > 150) ,
+        "Lluvia fuerte":   (R > 180) & (G >= 160) & (B < 30),
+        "Lluvia moderada": (G > 120) & (R < 120)  & (B <  60),
+        "Lluvia leve":     (B >  70) & (R <  50)  & (G < 110),
     }
     clasificado = np.zeros(arr.shape[:2], dtype=bool)
     for m in mascaras.values():
@@ -299,7 +275,7 @@ def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
 
         categoria = "Sin lluvia"
         for cat in ["Tormenta severa", "Tormenta fuerte", "Lluvia fuerte",
-                    "Lluvia moderada", "Lluvia leve", "Nubosidad alta"]:
+                    "Lluvia moderada", "Lluvia leve"]:
             if pcts[cat] >= LLUVIA_UMBRAL[cat]:
                 categoria = cat
                 break
