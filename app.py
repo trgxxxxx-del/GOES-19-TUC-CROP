@@ -51,13 +51,18 @@ MAT_PATH        = Path("matriz de departamentos.xlsx")
 MODEL_PATH      = Path("LapSRN_x2.pb")
 TZ_ARG          = timezone(timedelta(hours=-3))
 
-# ── Paleta BD Enhancement Band 13 – valores RGB reales GOES-19 ───────────────
-# Rojo     R=231 G=31  B=14  → Tormenta fuerte    (tops < −65°C)
-# Naranja  R=237 G=117 B=5   → Lluvia fuerte       (tops −55/−65°C)
-# Amarillo R=225 G=243 B=4   → Lluvia moderada     (tops −45/−55°C)
-# Verde    R=68  G=176 B=19  → Lluvia leve         (tops −35/−45°C)
-# Azul     R=18  G=44  B=119 → Alta nubosidad      (tops −20/−35°C)
-# Gris     R≈G≈B            → Sin lluvia
+# ── Categorías de lluvia ──────────────────────────────────────────────────────
+# Banda 13 (IR onda larga): imagen en escala de grises donde
+#   píxel OSCURO (valor bajo)  → temperatura de brillo FRÍA → nube alta → lluvia
+#   píxel CLARO (valor alto)   → temperatura de brillo CÁLIDA → superficie o nube baja
+#
+# Umbrales empíricos sobre imagen 0-255 (invertida: frío=oscuro):
+#   < 40  → tops muy fríos < −60°C → Tormenta fuerte
+#   40-70 → tops −45/−60°C         → Lluvia fuerte
+#   70-95 → tops −30/−45°C         → Lluvia moderada
+#   95-120→ tops −15/−30°C         → Lluvia leve
+#   120-150→ tops 0/−15°C          → Alta nubosidad
+#   > 150 → superficie/nube baja   → Sin lluvia significativa
 
 LLUVIA_CATEGORIAS = [
     "Tormenta fuerte",
@@ -81,13 +86,26 @@ LLUVIA_ICONOS = {
     "Lluvia moderada": "🌦️",
     "Lluvia leve":     "🌂",
     "Alta nubosidad":  "☁️",
-    "Sin lluvia":      "",
+    "Sin lluvia":      "🌤️",
 }
-LLUVIA_UMBRAL = {
-    "Tormenta fuerte": 3,
-    "Lluvia fuerte":   5,
-    "Lluvia moderada": 8,
-    "Lluvia leve":     20,
+
+# Umbrales de píxel (valor máximo para pertenecer a la categoría)
+# Imagen B13 NOAA: oscuro=frío=nube alta, claro=cálido=sin nube
+LLUVIA_PIXELES = {
+    "Tormenta fuerte": 40,    # px < 40
+    "Lluvia fuerte":   70,    # 40 ≤ px < 70
+    "Lluvia moderada": 95,    # 70 ≤ px < 95
+    "Lluvia leve":     120,   # 95 ≤ px < 120
+    "Alta nubosidad":  150,   # 120 ≤ px < 150
+    # > 150 → Sin lluvia
+}
+
+# % mínimo de píxeles del departamento en esa categoría para activarla
+LLUVIA_UMBRAL_PCT = {
+    "Tormenta fuerte": 2,
+    "Lluvia fuerte":   4,
+    "Lluvia moderada": 6,
+    "Lluvia leve":     15,
     "Alta nubosidad":  10,
 }
 
@@ -159,25 +177,20 @@ def color_nubosidad(pct: float) -> str:
     else:           return "#6abf6a"
 
 
-def _mascaras_lluvia(arr: np.ndarray) -> dict:
-    R, G, B = arr[:,:,0], arr[:,:,1], arr[:,:,2]
-    # Paleta BD Enhancement calibrada con valores reales GOES-19:
-    # Rojo     R=231 G=31  B=14  → Tormenta fuerte
-    # Naranja  R=237 G=117 B=5   → Lluvia fuerte
-    # Amarillo R=225 G=243 B=4   → Lluvia moderada
-    # Verde    R=68  G=176 B=19  → Lluvia leve
-    # Azul     R=18  G=44  B=119 → Alta nubosidad
+def _mascaras_lluvia_b13(gray: np.ndarray) -> dict:
+    """
+    Clasifica píxeles de Banda 13 (escala de grises) por temperatura de brillo.
+    Valor bajo (oscuro) = nube alta fría = mayor probabilidad de lluvia.
+    """
+    lim = LLUVIA_PIXELES
     mascaras = {
-        "Tormenta fuerte": (R > 180) & (G <  70) & (B <  50),
-        "Lluvia fuerte":   (R > 180) & (G >= 70) & (G < 160) & (B < 30),
-        "Lluvia moderada": (R > 180) & (G >= 160) & (B < 30),
-        "Lluvia leve":     (G > 120) & (R < 120)  & (B <  60),
-        "Alta nubosidad":  (B >  70) & (R <  50)  & (G < 110),
+        "Tormenta fuerte": gray < lim["Tormenta fuerte"],
+        "Lluvia fuerte":   (gray >= lim["Tormenta fuerte"]) & (gray < lim["Lluvia fuerte"]),
+        "Lluvia moderada": (gray >= lim["Lluvia fuerte"])   & (gray < lim["Lluvia moderada"]),
+        "Lluvia leve":     (gray >= lim["Lluvia moderada"]) & (gray < lim["Lluvia leve"]),
+        "Alta nubosidad":  (gray >= lim["Lluvia leve"])     & (gray < lim["Alta nubosidad"]),
+        "Sin lluvia":       gray >= lim["Alta nubosidad"],
     }
-    clasificado = np.zeros(arr.shape[:2], dtype=bool)
-    for m in mascaras.values():
-        clasificado |= m
-    mascaras["Sin lluvia"] = ~clasificado
     return mascaras
 
 
@@ -250,7 +263,8 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
 
 @st.cache_data(ttl=0)
 def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
-    img = Image.open(BytesIO(img_bytes_b13)).convert("RGB")
+    # Banda 13 se carga en escala de grises
+    img = Image.open(BytesIO(img_bytes_b13)).convert("L")
 
     df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
     dept_matrix  = df.values.astype(int)
@@ -259,15 +273,15 @@ def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
     if img.size != (mat_w, mat_h):
         img = img.resize((mat_w, mat_h), Image.LANCZOS)
 
-    arr      = np.array(img)
-    mascaras = _mascaras_lluvia(arr)
+    gray     = np.array(img)
+    mascaras = _mascaras_lluvia_b13(gray)
 
     results = []
     for nombre, codigo in DEPARTAMENTOS.items():
         mask_dept = dept_matrix == codigo
         total     = int(np.sum(mask_dept))
         if total == 0:
-            results.append((nombre, "Sin lluvia"))
+            results.append((nombre, "Sin lluvia", {}))
             continue
 
         pcts = {cat: float(np.sum(m & mask_dept)) / total * 100
@@ -276,11 +290,11 @@ def calcular_lluvia(img_bytes_b13: bytes, ts_key: str):
         categoria = "Sin lluvia"
         for cat in ["Tormenta fuerte", "Lluvia fuerte",
                     "Lluvia moderada", "Lluvia leve", "Alta nubosidad"]:
-            if pcts[cat] >= LLUVIA_UMBRAL[cat]:
+            if pcts[cat] >= LLUVIA_UMBRAL_PCT[cat]:
                 categoria = cat
                 break
 
-        results.append((nombre, categoria))
+        results.append((nombre, categoria, pcts))
 
     orden = {c: i for i, c in enumerate(reversed(LLUVIA_CATEGORIAS))}
     results.sort(key=lambda x: orden[x[1]], reverse=True)
@@ -347,6 +361,19 @@ try:
         with tab_lluvia:
             st.subheader("🌧️ Probabilidad de lluvia por departamento")
 
+            # Leyenda
+            st.markdown(
+                " &nbsp; ".join(
+                    f"<span style='background:{LLUVIA_COLORES[c]}30; "
+                    f"border-left:3px solid {LLUVIA_COLORES[c]}; "
+                    f"padding:1px 6px; border-radius:3px; font-size:0.8em'>"
+                    f"{LLUVIA_ICONOS[c]} {c}</span>"
+                    for c in LLUVIA_CATEGORIAS
+                ),
+                unsafe_allow_html=True,
+            )
+            st.markdown("<div style='margin-top:6px'></div>", unsafe_allow_html=True)
+
             if not MAT_PATH.exists():
                 st.warning(
                     "No se encontró **matriz de departamentos.xlsx**. "
@@ -357,19 +384,34 @@ try:
                     b13_bytes  = imagen_a_bytes(crop_b13)
                     datos_lluv = calcular_lluvia(b13_bytes, ts_key)
 
-                    for nombre, categoria in datos_lluv:
+                    for nombre, categoria, pcts in datos_lluv:
                         color = LLUVIA_COLORES[categoria]
                         icono = LLUVIA_ICONOS[categoria]
+                        # Tooltip con desglose de % por categoría
+                        detalle = " | ".join(
+                            f"{c}: {pcts.get(c, 0):.1f}%"
+                            for c in LLUVIA_CATEGORIAS
+                            if pcts.get(c, 0) > 0.5
+                        )
                         st.markdown(
                             f"""<div style='display:flex; justify-content:space-between;
                                 align-items:center; padding:4px 8px; margin:2px 0;
                                 border-radius:4px; background:{color}20;
-                                border-left:4px solid {color}'>
+                                border-left:4px solid {color}'
+                                title='{detalle}'>
                                 <span>{nombre}</span>
                                 <strong>{icono} {categoria}</strong>
                             </div>""",
                             unsafe_allow_html=True,
                         )
+
+                    # Nota sobre calibración
+                    st.markdown(
+                        "<p style='font-size:0.75em; color:#888; margin-top:8px'>"
+                        "Basado en temperatura de brillo Banda 13 (IR onda larga). "
+                        "Pasá el cursor sobre cada departamento para ver el desglose.</p>",
+                        unsafe_allow_html=True,
+                    )
                 except Exception as e:
                     st.error(f"Error en el cálculo de lluvia: {e}")
 
