@@ -45,7 +45,7 @@ URL_BAND13   = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/ssa/13/7200x4
 
 # ── Constantes ───────────────────────────────────────────────────────────────
 CROP            = (2717, 1382, 2932, 1600)
-THRESHOLD_DIA   = 110
+THRESHOLD_DIA   = 10
 THRESHOLD_NOCHE = 110
 MAT_PATH        = Path("matriz de departamentos.xlsx")
 MODEL_PATH      = Path("LapSRN_x2.pb")
