@@ -214,9 +214,14 @@ def cargar_imagen_satelital():
 
 # ── Cálculo ────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=0)
-def calcular_mascara_nube(img_bytes: bytes, ts_key: str, diurno: bool):
+def calcular_mascara_nube(img_bytes: bytes, ts_key: str, diurno: bool, mat_mtime: float):
     """Devuelve (dept_matrix, mascara_nube) para reusar tanto en la tabla
-    de porcentajes como en la imagen de máscara."""
+    de porcentajes como en la imagen de máscara.
+
+    mat_mtime (fecha de modificación de MAT_PATH) se recibe solo para
+    formar parte de la clave de caché: si se edita el xlsx, este valor
+    cambia y st.cache_data recalcula en vez de devolver un resultado
+    viejo cacheado con la matriz anterior."""
     img_rgb = Image.open(BytesIO(img_bytes)).convert("RGB")
 
     df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
@@ -394,7 +399,8 @@ try:
         else:
             try:
                 calculo_bytes            = imagen_a_bytes(crop_geo)
-                dept_matrix, mascara_nube = calcular_mascara_nube(calculo_bytes, ts_key, diurno)
+                mat_mtime                = MAT_PATH.stat().st_mtime
+                dept_matrix, mascara_nube = calcular_mascara_nube(calculo_bytes, ts_key, diurno, mat_mtime)
 
                 with tab_tabla:
                     st.subheader("☁️ Nubosidad por departamento")
