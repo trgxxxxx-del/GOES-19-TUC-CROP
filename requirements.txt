@@ -5,3 +5,4 @@ numpy
 pandas
 openpyxl
 opencv-contrib-python-headless
+scipy
