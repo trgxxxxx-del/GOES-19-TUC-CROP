@@ -312,6 +312,28 @@ def generar_imagen_mascara(dept_matrix: np.ndarray, mascara_nube: np.ndarray,
     return img
 
 
+def generar_imagen_con_limites(img_base: Image.Image, dept_matrix: np.ndarray) -> Image.Image:
+    """Superpone en blanco, sobre la imagen satelital mejorada, los
+    límites entre departamentos. La máscara de bordes se calcula a la
+    resolución de la matriz de deptos y se escala (NEAREST, para no
+    generar bordes grises por interpolación) al tamaño de la imagen
+    base, que suele tener mayor resolución por el mejorado/superresolución."""
+    dept_sin_costura = _cerrar_costuras(dept_matrix)
+    h, w = dept_sin_costura.shape
+
+    borde = np.zeros((h, w), dtype=bool)
+    borde[:, :-1] |= dept_sin_costura[:, :-1] != dept_sin_costura[:, 1:]
+    borde[:-1, :] |= dept_sin_costura[:-1, :] != dept_sin_costura[1:, :]
+
+    borde_img = Image.fromarray((borde * 255).astype(np.uint8), mode="L")
+    borde_img = borde_img.resize(img_base.size, Image.NEAREST)
+    borde_arr = np.array(borde_img) > 127
+
+    resultado = np.array(img_base.convert("RGB")).copy()
+    resultado[borde_arr] = (255, 255, 255)
+    return Image.fromarray(resultado, mode="RGB")
+
+
 # ── UI ────────────────────────────────────────────────────────────────────────
 try:
     sr_model = cargar_modelo_sr()
@@ -341,7 +363,9 @@ try:
         )
 
     with col_tabla:
-        tab_tabla, tab_mapa = st.tabs(["📊 Nubosidad", "🗺️ Mapa de nubes"])
+        tab_tabla, tab_mapa, tab_bordes = st.tabs(
+            ["📊 Nubosidad", "🗺️ Mapa de nubes", "🖼️ Imagen con límites"]
+        )
 
         if not MAT_PATH.exists():
             with tab_tabla:
@@ -377,6 +401,18 @@ try:
                         label="⬇️ Descargar mapa de nubes",
                         data=imagen_a_bytes(img_mascara, fmt="PNG"),
                         file_name="mapa_nubes.png",
+                        mime="image/png",
+                        use_container_width=False
+                    )
+
+                with tab_bordes:
+                    st.subheader("🖼️ Imagen satelital con límites de departamentos")
+                    img_con_bordes = generar_imagen_con_limites(crop_display, dept_matrix)
+                    st.image(img_con_bordes, use_container_width=True)
+                    st.download_button(
+                        label="⬇️ Descargar imagen con límites",
+                        data=imagen_a_bytes(img_con_bordes, fmt="PNG"),
+                        file_name="tucuman_con_limites.png",
                         mime="image/png",
                         use_container_width=False
                     )
