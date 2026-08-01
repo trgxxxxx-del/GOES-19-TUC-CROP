@@ -6,6 +6,7 @@ from io import BytesIO
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from scipy import ndimage
 import cv2
 
 st.set_page_config(
@@ -58,6 +59,10 @@ LUZ_G_MENOS_B  = 15
 # Escala de agrandado para la imagen de máscara (la matriz de deptos es chica)
 ESCALA_MASCARA = 3
 
+# Ancho máximo (en píxeles) de "costura" entre dos departamentos vecinos que
+# se considera parte del límite y no del fondo (evita bordes duplicados).
+ANCHO_MAX_COSTURA = 2
+
 # ── Departamentos ─────────────────────────────────────────────────────────────
 DEPARTAMENTOS = {
     "San Miguel de Tucumán": 76,
@@ -78,6 +83,7 @@ DEPARTAMENTOS = {
     "La Cocha":              127,
     "Graneros":              219,
 }
+CODIGOS_VALIDOS = list(DEPARTAMENTOS.values())
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -197,18 +203,42 @@ def calcular_tabla_nubosidad(dept_matrix: np.ndarray, mascara_nube: np.ndarray):
     return results
 
 
+def _cerrar_costuras(dept_matrix: np.ndarray, max_ancho: int = ANCHO_MAX_COSTURA) -> np.ndarray:
+    """La matriz de departamentos trae una 'costura' (celdas con código
+    inválido, ej. 0) de uno o dos píxeles entre deptos vecinos, en vez de
+    que un depto termine justo donde empieza el otro. Si se detecta el
+    borde comparando códigos directamente, esa costura genera DOS líneas
+    (depto→costura y costura→depto) en vez de una. Acá se le asigna a cada
+    celda de costura el código del departamento válido más cercano, pero
+    solo si la costura es angosta (<= max_ancho); las zonas anchas de
+    fondo real (fuera del mapa) quedan intactas."""
+    es_valido = np.isin(dept_matrix, CODIGOS_VALIDOS)
+    if es_valido.all():
+        return dept_matrix
+
+    distancia, indices = ndimage.distance_transform_edt(
+        ~es_valido, return_distances=True, return_indices=True
+    )
+    vecino_mas_cercano = dept_matrix[indices[0], indices[1]]
+    a_rellenar = (~es_valido) & (distancia <= max_ancho)
+    return np.where(a_rellenar, vecino_mas_cercano, dept_matrix)
+
+
 def generar_imagen_mascara(dept_matrix: np.ndarray, mascara_nube: np.ndarray,
                             escala: int = ESCALA_MASCARA) -> Image.Image:
     """Fondo blanco, nubes detectadas en gris, y los límites entre
-    departamentos (o entre departamento y fuera de mapa) en negro."""
-    h, w = dept_matrix.shape
+    departamentos (o entre departamento y fuera de mapa) en negro,
+    con las costuras finas cerradas para que el borde no salga doble."""
+    dept_sin_costura = _cerrar_costuras(dept_matrix)
+
+    h, w = dept_sin_costura.shape
     canvas = np.full((h, w, 3), 255, dtype=np.uint8)
 
     canvas[mascara_nube] = (150, 150, 150)
 
     borde = np.zeros((h, w), dtype=bool)
-    borde[:, :-1] |= dept_matrix[:, :-1] != dept_matrix[:, 1:]
-    borde[:-1, :] |= dept_matrix[:-1, :] != dept_matrix[1:, :]
+    borde[:, :-1] |= dept_sin_costura[:, :-1] != dept_sin_costura[:, 1:]
+    borde[:-1, :] |= dept_sin_costura[:-1, :] != dept_sin_costura[1:, :]
     canvas[borde] = (0, 0, 0)
 
     img = Image.fromarray(canvas, mode="RGB")
