@@ -234,7 +234,12 @@ def generar_imagen_mascara(dept_matrix: np.ndarray, mascara_nube: np.ndarray,
     h, w = dept_sin_costura.shape
     canvas = np.full((h, w, 3), 255, dtype=np.uint8)
 
-    canvas[mascara_nube] = (150, 150, 150)
+    # Solo se pinta como nube lo que cae DENTRO de algún departamento.
+    # Fuera del mapa la imagen original trae contornos de provincias vecinas
+    # (líneas grises/blancas) que el umbral de brillo confunde con nube;
+    # como esa zona no entra en ningún departamento, se descarta acá.
+    es_valido = np.isin(dept_matrix, CODIGOS_VALIDOS)
+    canvas[mascara_nube & es_valido] = (150, 150, 150)
 
     borde = np.zeros((h, w), dtype=bool)
     borde[:, :-1] |= dept_sin_costura[:, :-1] != dept_sin_costura[:, 1:]
