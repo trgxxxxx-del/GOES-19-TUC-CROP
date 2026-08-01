@@ -150,39 +150,14 @@ def color_nubosidad(pct: float) -> str:
     else:           return "#6abf6a"
 
 
-def filtrar_formas_finas(mascara: np.ndarray,
-                          area_min: int = AREA_MIN_NUBE,
-                          compacidad_min: float = COMPACIDAD_MIN) -> np.ndarray:
-    """Descarta manchas con forma de línea (los límites provinciales que
-    trae dibujados el GEOCOLOR, que el umbral de brillo confunde con
-    nube), preservando las manchas de nube reales.
-
-    Se etiquetan los píxeles conectados (8-conectividad, para que una
-    línea diagonal en 'escalera' quede unida en una sola mancha) y se
-    descarta cada componente que sea chica o poco compacta: una línea,
-    aunque sea larga, ocupa un rectángulo contenedor mucho más grande que
-    su propia área (compacidad baja); una nube real llena buena parte de
-    su rectángulo (compacidad alta). Esto detecta líneas diagonales
-    completas, a diferencia de una simple apertura morfológica cuadrada
-    que solo mira bloques locales de 2x2 y puede dejar pasar tramos en
-    escalera."""
-    estructura_8 = np.ones((3, 3), dtype=bool)
-    etiquetas, n_etiquetas = ndimage.label(mascara, structure=estructura_8)
-    if n_etiquetas == 0:
-        return mascara
-
-    salida = np.zeros_like(mascara)
-    for slc, i in zip(ndimage.find_objects(etiquetas), range(1, n_etiquetas + 1)):
-        if slc is None:
-            continue
-        comp = etiquetas[slc] == i
-        area = int(comp.sum())
-        area_rectangulo = comp.shape[0] * comp.shape[1]
-        compacidad = area / area_rectangulo if area_rectangulo else 0.0
-        if area >= area_min and compacidad >= compacidad_min:
-            salida[slc][comp] = True
-
-    return salida
+def filtrar_formas_finas(mascara: np.ndarray) -> np.ndarray:
+    """Apertura morfológica (erosión + dilatación) con un elemento
+    estructurante en forma de cruz: borra líneas de 1 píxel de ancho —
+    como los límites provinciales dibujados por NOAA, rectas o
+    diagonales— sin afectar nubes reales, aunque sean alargadas o de
+    forma irregular."""
+    estructura_cruz = ndimage.generate_binary_structure(2, 1)  # cruz (4-conectividad)
+    return ndimage.binary_opening(mascara, structure=estructura_cruz, iterations=1)
 
 
 # ── Carga de imagen ───────────────────────────────────────────────────────────
@@ -248,9 +223,9 @@ def calcular_mascara_nube(img_bytes: bytes, ts_key: str, diurno: bool, mat_mtime
 
     # Las líneas de límite provincial que NOAA dibuja sobre la imagen caen,
     # en algunos tramos, dentro del territorio válido de un departamento y
-    # el umbral de brillo las toma como nube. Se descartan por su forma
-    # (poco compactas, aunque sean diagonales) en vez de por su brillo,
-    # así no se pierden nubes reales muy blancas.
+    # el umbral de brillo las toma como nube. Se descartan por su ancho
+    # (1 píxel, incluso en diagonal) en vez de por su brillo, así no se
+    # pierden nubes reales aunque sean alargadas o difusas.
     mascara_nube = filtrar_formas_finas(mascara_nube)
 
     return dept_matrix, mascara_nube
