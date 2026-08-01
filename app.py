@@ -20,19 +20,26 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
+
+    /* Alinea verticalmente las dos columnas (imagen satelital y mapa) */
+    div[data-testid="stHorizontalBlock"] {
+        align-items: center;
+    }
+
+    /* Misma altura para ambas imágenes; el ancho se ajusta solo,
+       preservando la relación de aspecto de cada una (sin deformar). */
+    [data-testid="stImage"] {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
     [data-testid="stImage"] img {
-        max-width: 750px !important;
+        height: 520px !important;
+        width: auto !important;
+        max-width: 100% !important;
+        object-fit: contain;
         display: block;
         margin: auto;
-    }
-    div[data-testid="column"]:first-child {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        padding-top: 3rem;
-    }
-    div[data-testid="column"]:last-child {
-        margin-top: -3rem;
     }
     </style>
 """, unsafe_allow_html=True)
