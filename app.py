@@ -56,10 +56,16 @@ TZ_ARG          = timezone(timedelta(hours=-3))
 LUZ_R_MENOS_B  = 40
 LUZ_G_MENOS_B  = 15
 
-# Ancho mínimo (en píxeles) que debe tener una región para sobrevivir a la
-# apertura morfológica. Las líneas de límite provincial de NOAA tienen ~1px
-# de ancho y no lo sobreviven; las manchas de nube real sí.
-MIN_ANCHO_NUBE = 2
+# Filtro de forma para descartar líneas (límites provinciales de NOAA) que
+# el umbral de brillo confunde con nube. Se agrupan píxeles conectados
+# (incluida diagonal) en "manchas" y se descarta cada una según:
+#   - AREA_MIN_NUBE: cantidad mínima de píxeles que debe tener la mancha.
+#   - COMPACIDAD_MIN: área de la mancha / área de su rectángulo contenedor.
+#     Una nube real es compacta (llena gran parte de su rectángulo); una
+#     línea, aunque sea larga, ocupa un rectángulo mucho más grande que su
+#     propia área (compacidad baja), incluso si es diagonal.
+AREA_MIN_NUBE  = 2
+COMPACIDAD_MIN = 0.4
 
 # Escala de agrandado para la imagen de máscara (la matriz de deptos es chica)
 ESCALA_MASCARA = 3
