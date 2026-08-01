@@ -34,7 +34,7 @@ st.markdown("""
         justify-content: center;
     }
     [data-testid="stImage"] img {
-        height: 520px !important;
+        height: 640px !important;
         width: auto !important;
         max-width: 100% !important;
         object-fit: contain;
