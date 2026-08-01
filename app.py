@@ -335,6 +335,14 @@ def generar_imagen_con_limites(img_base: Image.Image, dept_matrix: np.ndarray) -
     borde[:, :-1] |= dif_horiz
     borde[:-1, :] |= dif_vert
 
+    # Donde un límite interno llega justo al borde de la provincia, se
+    # extiende 1 píxel hacia la zona "fuera de mapa" para que se una
+    # visualmente con el contorno ya dibujado en la imagen satelital
+    # (que no siempre coincide píxel a píxel con nuestra matriz). Esto
+    # no dibuja el contorno completo: solo empuja las puntas sueltas.
+    borde_dilatado = ndimage.binary_dilation(borde, iterations=1)
+    borde = borde | (borde_dilatado & ~es_valido)
+
     borde_img = Image.fromarray((borde * 255).astype(np.uint8), mode="L")
     borde_img = borde_img.resize(img_base.size, Image.NEAREST)
     borde_arr = np.array(borde_img) > 127
