@@ -64,15 +64,15 @@ LUZ_R_MENOS_B  = 40
 LUZ_G_MENOS_B  = 15
 
 # Filtro de forma para descartar líneas (límites provinciales de NOAA) que
-# el umbral de brillo confunde con nube. Se agrupan píxeles conectados
-# (incluida diagonal) en "manchas" y se descarta cada una según:
-#   - AREA_MIN_NUBE: cantidad mínima de píxeles que debe tener la mancha.
-#   - COMPACIDAD_MIN: área de la mancha / área de su rectángulo contenedor.
-#     Una nube real es compacta (llena gran parte de su rectángulo); una
-#     línea, aunque sea larga, ocupa un rectángulo mucho más grande que su
-#     propia área (compacidad baja), incluso si es diagonal.
-AREA_MIN_NUBE  = 2
-COMPACIDAD_MIN = 0.4
+# el umbral de brillo confunde con nube: apertura morfológica con un
+# elemento estructurante en forma de CRUZ (4-conectividad: arriba, abajo,
+# izquierda, derecha — sin diagonales). Con esa forma, un píxel que solo
+# toca la línea en diagonal no tiene ningún vecino ortogonal que también
+# sea parte de ella, así que la erosión la borra completa, sea recta o
+# diagonal. Una nube real, aunque sea alargada o difusa (no compacta),
+# sobrevive mientras tenga al menos algún píxel "macizo" en esas 4
+# direcciones — a diferencia de filtrar por compacidad del rectángulo
+# contenedor, esto no descarta nubes reales con forma irregular o alargada.
 
 # Escala de agrandado para la imagen de máscara (la matriz de deptos es chica)
 ESCALA_MASCARA = 3
@@ -340,17 +340,24 @@ def generar_imagen_con_limites(img_base: Image.Image, dept_matrix: np.ndarray) -
     borde[:, :-1] |= dif_horiz
     borde[:-1, :] |= dif_vert
 
-    # Donde un límite interno llega justo al borde de la provincia, se
-    # extiende 1 píxel hacia la zona "fuera de mapa" para que se una
-    # visualmente con el contorno ya dibujado en la imagen satelital
-    # (que no siempre coincide píxel a píxel con nuestra matriz). Esto
-    # no dibuja el contorno completo: solo empuja las puntas sueltas.
-    borde_dilatado = ndimage.binary_dilation(borde, iterations=1)
-    borde = borde | (borde_dilatado & ~es_valido)
-
+    # Se escalan por separado el borde y la zona "válida" a la resolución
+    # final de la imagen (NEAREST, sin interpolar).
     borde_img = Image.fromarray((borde * 255).astype(np.uint8), mode="L")
     borde_img = borde_img.resize(img_base.size, Image.NEAREST)
     borde_arr = np.array(borde_img) > 127
+
+    valido_img = Image.fromarray((es_valido * 255).astype(np.uint8), mode="L")
+    valido_img = valido_img.resize(img_base.size, Image.NEAREST)
+    valido_arr = np.array(valido_img) > 127
+
+    # Donde un límite interno llega justo al borde de la provincia, se
+    # extiende 1 SOLO píxel (ya en la resolución final) hacia la zona
+    # "fuera de mapa" para que se una visualmente con el contorno de la
+    # imagen satelital. Se hace acá, después de escalar, para que la
+    # extensión sea de exactamente 1 píxel y no se agrande junto con el
+    # factor de escala (lo que antes hacía que se saliera del contorno).
+    borde_dilatado = ndimage.binary_dilation(borde_arr, iterations=1)
+    borde_arr = borde_arr | (borde_dilatado & ~valido_arr)
 
     resultado = np.array(img_base.convert("RGB")).copy()
     resultado[borde_arr] = (255, 255, 255)
