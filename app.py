@@ -51,6 +51,11 @@ MAT_PATH        = Path("matriz de departamentos.xlsx")
 MODEL_PATH      = Path("LapSRN_x2.pb")
 TZ_ARG          = timezone(timedelta(hours=-3))
 
+# Umbrales para distinguir luces de ciudad (cálidas: R y G altos, B bajo)
+# de nubes reales (blancas/azuladas: R≈G≈B o B alto) en la imagen nocturna.
+LUZ_R_MENOS_B  = 40
+LUZ_G_MENOS_B  = 15
+
 # ── Paleta BD Enhancement Band 13 – valores RGB reales GOES-19 ───────────────
 # Rojo     R=231 G=31  B=14  → Tormenta fuerte    (tops < −65°C)
 # Naranja  R=237 G=117 B=5   → Lluvia fuerte       (tops −55/−65°C)
@@ -224,18 +229,32 @@ def cargar_imagen_satelital():
 # ── Cálculos ──────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=0)
 def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
-    img = Image.open(BytesIO(img_bytes)).convert("L")
+    # Trabajamos en RGB (no en escala de grises directamente) para poder
+    # distinguir de noche entre nubes reales y luces de ciudad, que también
+    # son muy brillantes pero NO son nubes.
+    img_rgb = Image.open(BytesIO(img_bytes)).convert("RGB")
 
     df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
     dept_matrix  = df.values.astype(int)
     mat_h, mat_w = dept_matrix.shape
 
-    if img.size != (mat_w, mat_h):
-        img = img.resize((mat_w, mat_h), Image.LANCZOS)
+    if img_rgb.size != (mat_w, mat_h):
+        img_rgb = img_rgb.resize((mat_w, mat_h), Image.LANCZOS)
 
-    gray         = np.array(img)
+    arr = np.array(img_rgb).astype(np.int16)
+    R, G, B = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+    # Luminancia equivalente a convert("L") (ITU-R BT.601)
+    gray = 0.299 * R + 0.587 * G + 0.114 * B
+
     threshold    = THRESHOLD_DIA if diurno else THRESHOLD_NOCHE
     mascara_nube = gray > threshold
+
+    if not diurno:
+        # Las luces urbanas son cálidas (R y G bastante por encima de B).
+        # Si se ven, el cielo está despejado ahí (una nube las taparía),
+        # así que hay que excluirlas del conteo de nubosidad.
+        luces_ciudad = (R - B > LUZ_R_MENOS_B) & (G - B > LUZ_G_MENOS_B)
+        mascara_nube = mascara_nube & ~luces_ciudad
 
     results = []
     for nombre, codigo in DEPARTAMENTOS.items():
