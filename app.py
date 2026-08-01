@@ -56,6 +56,11 @@ TZ_ARG          = timezone(timedelta(hours=-3))
 LUZ_R_MENOS_B  = 40
 LUZ_G_MENOS_B  = 15
 
+# Ancho mínimo (en píxeles) que debe tener una región para sobrevivir a la
+# apertura morfológica. Las líneas de límite provincial de NOAA tienen ~1px
+# de ancho y no lo sobreviven; las manchas de nube real sí.
+MIN_ANCHO_NUBE = 2
+
 # Escala de agrandado para la imagen de máscara (la matriz de deptos es chica)
 ESCALA_MASCARA = 3
 
@@ -132,6 +137,18 @@ def color_nubosidad(pct: float) -> str:
     else:           return "#6abf6a"
 
 
+def filtrar_formas_finas(mascara: np.ndarray, min_ancho: int = MIN_ANCHO_NUBE) -> np.ndarray:
+    """Apertura morfológica (erosión + dilatación): borra rasgos delgados
+    tipo línea —como los límites provinciales que trae dibujados el
+    GEOCOLOR y que el umbral de brillo confunde con nube— preservando las
+    manchas de nube reales, que tienen área en vez de ser solo un trazo
+    fino de 1 píxel de ancho."""
+    if min_ancho <= 1:
+        return mascara
+    estructura = np.ones((min_ancho, min_ancho), dtype=bool)
+    return ndimage.binary_opening(mascara, structure=estructura)
+
+
 # ── Carga de imagen ───────────────────────────────────────────────────────────
 @st.cache_data(ttl=600)
 def cargar_imagen_satelital():
@@ -187,6 +204,13 @@ def calcular_mascara_nube(img_bytes: bytes, ts_key: str, diurno: bool):
         # así que hay que excluirlas del conteo de nubosidad.
         luces_ciudad = (R - B > LUZ_R_MENOS_B) & (G - B > LUZ_G_MENOS_B)
         mascara_nube = mascara_nube & ~luces_ciudad
+
+    # Las líneas de límite provincial que NOAA dibuja sobre la imagen caen,
+    # en algunos tramos, dentro del territorio válido de un departamento y
+    # el umbral de brillo las toma como nube. Como son rasgos angostos
+    # (~1px) y no manchas con área, una apertura morfológica las elimina
+    # sin afectar a las nubes reales.
+    mascara_nube = filtrar_formas_finas(mascara_nube, MIN_ANCHO_NUBE)
 
     return dept_matrix, mascara_nube
 
