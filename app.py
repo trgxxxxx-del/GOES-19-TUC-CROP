@@ -264,34 +264,6 @@ def _cerrar_costuras(dept_matrix: np.ndarray, max_ancho: int = ANCHO_MAX_COSTURA
     return np.where(a_rellenar, vecino_mas_cercano, dept_matrix)
 
 
-def generar_imagen_mascara(dept_matrix: np.ndarray, mascara_nube: np.ndarray,
-                            escala: int = ESCALA_MASCARA) -> Image.Image:
-    """Fondo blanco, nubes detectadas en gris, y los límites entre
-    departamentos (o entre departamento y fuera de mapa) en negro,
-    con las costuras finas cerradas para que el borde no salga doble."""
-    dept_sin_costura = _cerrar_costuras(dept_matrix)
-
-    h, w = dept_sin_costura.shape
-    canvas = np.full((h, w, 3), 255, dtype=np.uint8)
-
-    # Solo se pinta como nube lo que cae DENTRO de algún departamento.
-    # Fuera del mapa la imagen original trae contornos de provincias vecinas
-    # (líneas grises/blancas) que el umbral de brillo confunde con nube;
-    # como esa zona no entra en ningún departamento, se descarta acá.
-    es_valido = np.isin(dept_matrix, CODIGOS_VALIDOS)
-    canvas[mascara_nube & es_valido] = (150, 150, 150)
-
-    borde = np.zeros((h, w), dtype=bool)
-    borde[:, :-1] |= dept_sin_costura[:, :-1] != dept_sin_costura[:, 1:]
-    borde[:-1, :] |= dept_sin_costura[:-1, :] != dept_sin_costura[1:, :]
-    canvas[borde] = (0, 0, 0)
-
-    img = Image.fromarray(canvas, mode="RGB")
-    if escala > 1:
-        img = img.resize((w * escala, h * escala), Image.NEAREST)
-    return img
-
-
 def generar_imagen_con_limites(img_base: Image.Image, dept_matrix: np.ndarray) -> Image.Image:
     """Superpone en blanco, sobre la imagen satelital mejorada, los
     límites ENTRE departamentos (no el contorno externo de la provincia,
@@ -355,76 +327,47 @@ try:
         st.cache_data.clear()
         st.rerun()
 
-    col_img, col_tabla = st.columns([1, 1])
-
-    with col_img:
-        st.image(crop_display, use_container_width=True)
-        st.download_button(
-            label="⬇️ Descargar imagen mejorada",
-            data=imagen_a_bytes(crop_display, fmt="PNG"),
-            file_name="tucuman_satelital.png",
-            mime="image/png",
-            use_container_width=False
+    if not MAT_PATH.exists():
+        st.warning(
+            "No se encontró **matriz de departamentos.xlsx**. "
+            "Subila al repositorio para activar el cálculo."
         )
+    else:
+        try:
+            calculo_bytes             = imagen_a_bytes(crop_geo)
+            mat_mtime                 = MAT_PATH.stat().st_mtime
+            dept_matrix, mascara_nube = calcular_mascara_nube(calculo_bytes, ts_key, diurno, mat_mtime)
 
-    with col_tabla:
-        tab_tabla, tab_mapa, tab_bordes = st.tabs(
-            ["📊 Nubosidad", "🗺️ Mapa de nubes", "🖼️ Imagen con límites"]
-        )
+            col_img, col_tabla = st.columns([1, 1])
 
-        if not MAT_PATH.exists():
-            with tab_tabla:
-                st.warning(
-                    "No se encontró **matriz de departamentos.xlsx**. "
-                    "Subila al repositorio para activar el cálculo."
+            with col_img:
+                img_con_bordes = generar_imagen_con_limites(crop_display, dept_matrix)
+                st.image(img_con_bordes, use_container_width=True)
+                st.download_button(
+                    label="⬇️ Descargar imagen con límites",
+                    data=imagen_a_bytes(img_con_bordes, fmt="PNG"),
+                    file_name="tucuman_con_limites.png",
+                    mime="image/png",
+                    use_container_width=False
                 )
-        else:
-            try:
-                calculo_bytes            = imagen_a_bytes(crop_geo)
-                mat_mtime                = MAT_PATH.stat().st_mtime
-                dept_matrix, mascara_nube = calcular_mascara_nube(calculo_bytes, ts_key, diurno, mat_mtime)
 
-                with tab_tabla:
-                    st.subheader("☁️ Nubosidad por departamento")
-                    datos = calcular_tabla_nubosidad(dept_matrix, mascara_nube)
-                    for nombre, pct in datos:
-                        color = color_nubosidad(pct)
-                        st.markdown(
-                            f"""<div style='display:flex; justify-content:space-between;
-                                padding:4px 8px; margin:2px 0; border-radius:4px;
-                                background:{color}20; border-left:4px solid {color}'>
-                                <span>{nombre}</span>
-                                <strong>{pct:.1f}%</strong>
-                            </div>""",
-                            unsafe_allow_html=True,
-                        )
-
-                with tab_mapa:
-                    st.subheader("🗺️ Departamentos y nubes detectadas")
-                    img_mascara = generar_imagen_mascara(dept_matrix, mascara_nube)
-                    st.image(img_mascara, use_container_width=True)
-                    st.download_button(
-                        label="⬇️ Descargar mapa de nubes",
-                        data=imagen_a_bytes(img_mascara, fmt="PNG"),
-                        file_name="mapa_nubes.png",
-                        mime="image/png",
-                        use_container_width=False
+            with col_tabla:
+                st.subheader("☁️ Nubosidad por departamento")
+                datos = calcular_tabla_nubosidad(dept_matrix, mascara_nube)
+                for nombre, pct in datos:
+                    color = color_nubosidad(pct)
+                    st.markdown(
+                        f"""<div style='display:flex; justify-content:space-between;
+                            padding:4px 8px; margin:2px 0; border-radius:4px;
+                            background:{color}20; border-left:4px solid {color}'>
+                            <span>{nombre}</span>
+                            <strong>{pct:.1f}%</strong>
+                        </div>""",
+                        unsafe_allow_html=True,
                     )
 
-                with tab_bordes:
-                    st.subheader("🖼️ Imagen satelital con límites de departamentos")
-                    img_con_bordes = generar_imagen_con_limites(crop_display, dept_matrix)
-                    st.image(img_con_bordes, use_container_width=True)
-                    st.download_button(
-                        label="⬇️ Descargar imagen con límites",
-                        data=imagen_a_bytes(img_con_bordes, fmt="PNG"),
-                        file_name="tucuman_con_limites.png",
-                        mime="image/png",
-                        use_container_width=False
-                    )
-
-            except Exception as e:
-                st.error(f"Error en el cálculo de nubosidad: {e}")
+        except Exception as e:
+            st.error(f"Error en el cálculo de nubosidad: {e}")
 
 except Exception as e:
     st.error(f"⚠️ Error al cargar la imagen: {e}")
