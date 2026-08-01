@@ -314,16 +314,26 @@ def generar_imagen_mascara(dept_matrix: np.ndarray, mascara_nube: np.ndarray,
 
 def generar_imagen_con_limites(img_base: Image.Image, dept_matrix: np.ndarray) -> Image.Image:
     """Superpone en blanco, sobre la imagen satelital mejorada, los
-    límites entre departamentos. La máscara de bordes se calcula a la
-    resolución de la matriz de deptos y se escala (NEAREST, para no
-    generar bordes grises por interpolación) al tamaño de la imagen
-    base, que suele tener mayor resolución por el mejorado/superresolución."""
+    límites ENTRE departamentos (no el contorno externo de la provincia,
+    que ya viene dibujado en la imagen satelital de NOAA). La máscara de
+    bordes se calcula a la resolución de la matriz de deptos y se escala
+    (NEAREST, para no generar bordes grises por interpolación) al tamaño
+    de la imagen base, que suele tener mayor resolución por el
+    mejorado/superresolución."""
     dept_sin_costura = _cerrar_costuras(dept_matrix)
     h, w = dept_sin_costura.shape
+    es_valido = np.isin(dept_sin_costura, CODIGOS_VALIDOS)
 
+    # Solo cuenta como límite si AMBOS lados son departamentos válidos y
+    # distintos; si uno de los lados es "fuera del mapa" no se dibuja
+    # (ese es el contorno provincial, ya presente en la imagen original).
     borde = np.zeros((h, w), dtype=bool)
-    borde[:, :-1] |= dept_sin_costura[:, :-1] != dept_sin_costura[:, 1:]
-    borde[:-1, :] |= dept_sin_costura[:-1, :] != dept_sin_costura[1:, :]
+    dif_horiz = (dept_sin_costura[:, :-1] != dept_sin_costura[:, 1:]) & \
+                es_valido[:, :-1] & es_valido[:, 1:]
+    dif_vert  = (dept_sin_costura[:-1, :] != dept_sin_costura[1:, :]) & \
+                es_valido[:-1, :] & es_valido[1:, :]
+    borde[:, :-1] |= dif_horiz
+    borde[:-1, :] |= dif_vert
 
     borde_img = Image.fromarray((borde * 255).astype(np.uint8), mode="L")
     borde_img = borde_img.resize(img_base.size, Image.NEAREST)
