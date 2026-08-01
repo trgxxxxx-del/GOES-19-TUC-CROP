@@ -55,6 +55,9 @@ TZ_ARG          = timezone(timedelta(hours=-3))
 LUZ_R_MENOS_B  = 40
 LUZ_G_MENOS_B  = 15
 
+# Escala de agrandado para la imagen de máscara (la matriz de deptos es chica)
+ESCALA_MASCARA = 3
+
 # ── Departamentos ─────────────────────────────────────────────────────────────
 DEPARTAMENTOS = {
     "San Miguel de Tucumán": 76,
@@ -152,10 +155,9 @@ def cargar_imagen_satelital():
 
 # ── Cálculo ────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=0)
-def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
-    # Trabajamos en RGB (no en escala de grises directamente) para poder
-    # distinguir de noche entre nubes reales y luces de ciudad, que también
-    # son muy brillantes pero NO son nubes.
+def calcular_mascara_nube(img_bytes: bytes, ts_key: str, diurno: bool):
+    """Devuelve (dept_matrix, mascara_nube) para reusar tanto en la tabla
+    de porcentajes como en la imagen de máscara."""
     img_rgb = Image.open(BytesIO(img_bytes)).convert("RGB")
 
     df           = pd.read_excel(MAT_PATH, sheet_name=0, header=None)
@@ -180,6 +182,10 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
         luces_ciudad = (R - B > LUZ_R_MENOS_B) & (G - B > LUZ_G_MENOS_B)
         mascara_nube = mascara_nube & ~luces_ciudad
 
+    return dept_matrix, mascara_nube
+
+
+def calcular_tabla_nubosidad(dept_matrix: np.ndarray, mascara_nube: np.ndarray):
     results = []
     for nombre, codigo in DEPARTAMENTOS.items():
         mask  = dept_matrix == codigo
@@ -189,6 +195,26 @@ def calcular_nubosidad(img_bytes: bytes, ts_key: str, diurno: bool):
 
     results.sort(key=lambda x: x[1], reverse=True)
     return results
+
+
+def generar_imagen_mascara(dept_matrix: np.ndarray, mascara_nube: np.ndarray,
+                            escala: int = ESCALA_MASCARA) -> Image.Image:
+    """Fondo blanco, nubes detectadas en gris, y los límites entre
+    departamentos (o entre departamento y fuera de mapa) en negro."""
+    h, w = dept_matrix.shape
+    canvas = np.full((h, w, 3), 255, dtype=np.uint8)
+
+    canvas[mascara_nube] = (150, 150, 150)
+
+    borde = np.zeros((h, w), dtype=bool)
+    borde[:, :-1] |= dept_matrix[:, :-1] != dept_matrix[:, 1:]
+    borde[:-1, :] |= dept_matrix[:-1, :] != dept_matrix[1:, :]
+    canvas[borde] = (0, 0, 0)
+
+    img = Image.fromarray(canvas, mode="RGB")
+    if escala > 1:
+        img = img.resize((w * escala, h * escala), Image.NEAREST)
+    return img
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
@@ -220,27 +246,46 @@ try:
         )
 
     with col_tabla:
-        st.subheader("☁️ Nubosidad por departamento")
+        tab_tabla, tab_mapa = st.tabs(["📊 Nubosidad", "🗺️ Mapa de nubes"])
+
         if not MAT_PATH.exists():
-            st.warning(
-                "No se encontró **matriz de departamentos.xlsx**. "
-                "Subila al repositorio para activar el cálculo."
-            )
+            with tab_tabla:
+                st.warning(
+                    "No se encontró **matriz de departamentos.xlsx**. "
+                    "Subila al repositorio para activar el cálculo."
+                )
         else:
             try:
-                calculo_bytes = imagen_a_bytes(crop_geo)
-                datos         = calcular_nubosidad(calculo_bytes, ts_key, diurno)
-                for nombre, pct in datos:
-                    color = color_nubosidad(pct)
-                    st.markdown(
-                        f"""<div style='display:flex; justify-content:space-between;
-                            padding:4px 8px; margin:2px 0; border-radius:4px;
-                            background:{color}20; border-left:4px solid {color}'>
-                            <span>{nombre}</span>
-                            <strong>{pct:.1f}%</strong>
-                        </div>""",
-                        unsafe_allow_html=True,
+                calculo_bytes            = imagen_a_bytes(crop_geo)
+                dept_matrix, mascara_nube = calcular_mascara_nube(calculo_bytes, ts_key, diurno)
+
+                with tab_tabla:
+                    st.subheader("☁️ Nubosidad por departamento")
+                    datos = calcular_tabla_nubosidad(dept_matrix, mascara_nube)
+                    for nombre, pct in datos:
+                        color = color_nubosidad(pct)
+                        st.markdown(
+                            f"""<div style='display:flex; justify-content:space-between;
+                                padding:4px 8px; margin:2px 0; border-radius:4px;
+                                background:{color}20; border-left:4px solid {color}'>
+                                <span>{nombre}</span>
+                                <strong>{pct:.1f}%</strong>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+
+                with tab_mapa:
+                    st.subheader("🗺️ Departamentos y nubes detectadas")
+                    img_mascara = generar_imagen_mascara(dept_matrix, mascara_nube)
+                    st.image(img_mascara, use_container_width=True)
+                    st.download_button(
+                        label="⬇️ Descargar mapa de nubes",
+                        data=imagen_a_bytes(img_mascara, fmt="PNG"),
+                        file_name="mapa_nubes.png",
+                        mime="image/png",
+                        use_container_width=False
                     )
+
             except Exception as e:
                 st.error(f"Error en el cálculo de nubosidad: {e}")
 
